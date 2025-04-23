@@ -1,3 +1,19 @@
+# Stryker-NET (HOMT Fork)
+
+> ⚠️ **This is a fork** of [stryker-mutator/stryker-net](https://github.com/stryker-mutator/stryker-net), extended with Higher-Order Mutation Testing (HOMT) for academic research.
+
+---
+
+## About this Fork
+
+- **Goal:** Integrate higher-order mutantion testing for more thorough and/or faster mutation testing.
+- **Thesis:** Implement and evaluate strategies for finding higher-order mutants in .NET Core & Framework.
+- **Status:** 🚧 Work in progress.
+
+---
+
+
+
 [![Nuget](https://img.shields.io/nuget/v/dotnet-stryker.svg?color=blue&label=dotnet-stryker&style=flat-square)](https://www.nuget.org/packages/dotnet-stryker/)
 [![Nuget](https://img.shields.io/nuget/dt/dotnet-stryker.svg?style=flat-square)](https://www.nuget.org/packages/dotnet-stryker/)
 [![Azure DevOps build](https://img.shields.io/azure-devops/build/stryker-mutator/Stryker/4/master.svg?label=Azure%20Pipelines&style=flat-square)](https://dev.azure.com/stryker-mutator/Stryker/_build/latest?definitionId=4)
