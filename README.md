@@ -2,7 +2,6 @@
 
 > ⚠️ **This is a fork** of [stryker-mutator/stryker-net](https://github.com/stryker-mutator/stryker-net), extended with Higher-Order Mutation Testing (HOMT) for academic research.
 
----
 
 ## About this Fork
 
