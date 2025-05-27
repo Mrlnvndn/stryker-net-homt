@@ -189,6 +189,7 @@ public class MutationTestProcess : IMutationTestProcess
         return true;
     }
 
+    //TODO insert HOMT here?
     private IEnumerable<List<IMutant>> BuildMutantGroupsForTest(IReadOnlyCollection<IMutant> mutantsNotRun)
     {
         if (_options.OptimizationMode.HasFlag(OptimizationModes.DisableMixMutants) ||

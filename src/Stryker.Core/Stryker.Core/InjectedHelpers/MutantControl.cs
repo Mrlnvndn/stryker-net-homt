@@ -38,6 +38,7 @@ namespace Stryker
         }
 
         // check with: Stryker.MutantControl.IsActive(ID)
+        // TODO: allow isActive to return true for mutliple ids during HOMT
         public static bool IsActive(int id)
         {
             if (CaptureCoverage)

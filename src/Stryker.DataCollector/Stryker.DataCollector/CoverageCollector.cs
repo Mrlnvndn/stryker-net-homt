@@ -100,6 +100,7 @@ namespace Stryker.DataCollector
         public void Log(string message) => _logger?.Invoke(message);
 
         // called before any test is run
+        // TODO: set multiple mutants active in the same test during HOMT
         public void TestSessionStart(TestSessionStartArgs testSessionStartArgs)
         {
             _defaultTraceListener = Trace.Listeners.OfType<DefaultTraceListener>().FirstOrDefault();
