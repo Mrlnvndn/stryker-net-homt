@@ -290,3 +290,7 @@ StrykerLogs/
 /src/Stryker.CLI/TestStatisticsAnalyzer/test-stats-report.json
 .DS_Store
 .nuget/
+
+
+#Papers
+**/papers/

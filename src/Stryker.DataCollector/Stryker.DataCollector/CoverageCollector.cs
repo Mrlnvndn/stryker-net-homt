@@ -176,6 +176,7 @@ namespace Stryker.DataCollector
             }
         }
 
+        //add IsHOMT flag to the configuration and read it here
         private void ReadConfiguration(string configuration)
         {
             var node = new XmlDocument();
