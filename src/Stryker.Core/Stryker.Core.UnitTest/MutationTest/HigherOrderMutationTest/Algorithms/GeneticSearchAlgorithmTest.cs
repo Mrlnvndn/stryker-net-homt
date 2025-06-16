@@ -129,7 +129,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
         {
             // Arrange
             var candidate = new List<IMutant> { CreateMockMutant(1), CreateMockMutant(2) };
-            var expectedScore = 10; // Example score, adjust based on your scoring logic
+            var expectedScore = 0.5; // Example score, adjust based on your scoring logic
 
             // Act
             var score = GeneticSearchAlgorithm.EvaluateCandidate(candidate, null);

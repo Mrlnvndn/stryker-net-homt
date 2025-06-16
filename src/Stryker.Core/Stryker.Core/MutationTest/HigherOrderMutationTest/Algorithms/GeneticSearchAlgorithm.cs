@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using Stryker.Abstractions;
 using Stryker.Abstractions.Options;
 using Stryker.Core.MutationTest;
@@ -26,6 +27,9 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         private readonly int _tournamentSize = 3;
         private readonly int _maxOrder = 4; // Maximum number of FOMs in a HOM
 
+        // Cache to store candidate keys to avoid repeated calculations
+        private readonly Dictionary<List<IMutant>, string> _candidateKeyCache = new Dictionary<List<IMutant>, string>(new CandidateEqualityComparer());
+
         /// <summary>
         /// Generates candidate Higher-Order Mutants (HOMs) using a genetic algorithm approach.
         /// </summary>
@@ -40,6 +44,15 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             IStrykerOptions options,
             MutationTestInput input)
         {
+            // Check if there are enough FOMs to create HOMs
+            if (availableFOMs.Count < 2)
+            {
+                yield break; // Not enough FOMs to create any HOMs
+            }
+
+            // Clear any existing cache
+            _candidateKeyCache.Clear();
+
             // Convert the read-only collection to a list for efficient indexed access
             var fomList = availableFOMs.ToList();
             
@@ -52,31 +65,42 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             // Keep track of all unique candidates yielded to the caller
             var yieldedCandidates = new HashSet<string>(StringComparer.Ordinal);
             
-            // Add initial population to tracking set
+            // Add initial population to tracking set and cache their keys
             foreach (var candidate in population)
             {
-                allCandidates.Add(GetCandidateKey(candidate));
+                var key = CalculateCandidateKey(candidate);
+                _candidateKeyCache[candidate] = key;
+                allCandidates.Add(key);
             }
             
             // Use the heuristics to score candidates
             var candidateScores = new Dictionary<string, double>();
             
             // Run genetic algorithm for several generations
-            for (int generation = 0; generation < _maxGenerations; generation++)
+            for (var generation = 0; generation < _maxGenerations; generation++)
             {
-                // Score each candidate in the current population
+                // Process each candidate in the population: cache keys and score in a single pass
+                var candidateKeys = new Dictionary<List<IMutant>, string>();
                 foreach (var candidate in population)
                 {
-                    var key = GetCandidateKey(candidate);
+                    // Get or calculate the candidate key
+                    if (!_candidateKeyCache.TryGetValue(candidate, out var key))
+                    {
+                        key = CalculateCandidateKey(candidate);
+                        _candidateKeyCache[candidate] = key;
+                    }
+                    candidateKeys[candidate] = key;
+                    
+                    // Score the candidate if not already scored
                     if (!candidateScores.ContainsKey(key))
                     {
                         candidateScores[key] = EvaluateCandidate(candidate, heuristics);
                     }
                 }
                 
-                // Sort population by their scores
-                population.Sort((a, b) => candidateScores[GetCandidateKey(b)]
-                    .CompareTo(candidateScores[GetCandidateKey(a)]));
+                // Sort population by their scores - use cached keys to avoid recalculation
+                population.Sort((a, b) => candidateScores[candidateKeys[b]]
+                    .CompareTo(candidateScores[candidateKeys[a]]));
                 
                 // Keep track of the elite candidates
                 var elites = population.Take(_eliteCount).ToList();
@@ -88,11 +112,15 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                 nextGeneration.AddRange(elites);
                 
                 // Fill the rest of the next generation with offspring
-                while (nextGeneration.Count < _populationSize)
+                var attempts = 0;
+                var maxAttempts = _populationSize * 10; // Allow reasonable number of attempts
+                while (nextGeneration.Count < _populationSize && attempts < maxAttempts)
                 {
+                    attempts++;
+                    
                     // Select parents using tournament selection
-                    var parent1 = TournamentSelection(population, candidateScores);
-                    var parent2 = TournamentSelection(population, candidateScores);
+                    var parent1 = TournamentSelection(population, candidateScores, candidateKeys);
+                    var parent2 = TournamentSelection(population, candidateScores, candidateKeys);
                     
                     // Perform crossover with some probability
                     List<IMutant> offspring;
@@ -112,12 +140,29 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                         Mutate(offspring, fomList);
                     }
                     
+                    // Calculate and cache the offspring key
+                    var offspringKey = CalculateCandidateKey(offspring);
+                    _candidateKeyCache[offspring] = offspringKey;
+                    
                     // Ensure the offspring is unique
-                    string offspringKey = GetCandidateKey(offspring);
-                    if (!allCandidates.Contains(offspringKey))
-                    {
-                        allCandidates.Add(offspringKey);
+                    if (allCandidates.Add(offspringKey))
+                    {                        
                         nextGeneration.Add(offspring);
+                    }
+                }
+                
+                // If we couldn't fill the next generation with unique candidates, fill with duplicates from the current generation
+                if (nextGeneration.Count < _populationSize)
+                {
+                    // Fill remaining spots with the best candidates from current population
+                    foreach (var candidate in population.OrderByDescending(c => candidateScores[candidateKeys[c]]))
+                    {
+                        if (nextGeneration.Count >= _populationSize)
+                        {
+                            break;
+                        }
+
+                        nextGeneration.Add(candidate);
                     }
                 }
                 
@@ -127,10 +172,9 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                 // Yield the best candidates from this generation, but avoid duplicates
                 foreach (var candidate in elites)
                 {
-                    string candidateKey = GetCandidateKey(candidate);
-                    if (!yieldedCandidates.Contains(candidateKey))
+                    var candidateKey = candidateKeys[candidate]; // Use cached key
+                    if (yieldedCandidates.Add(candidateKey))
                     {
-                        yieldedCandidates.Add(candidateKey);
                         yield return candidate;
                     }
                 }
@@ -143,18 +187,18 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         private List<List<IMutant>> InitializePopulation(List<IMutant> foms, int populationSize)
         {
             var population = new List<List<IMutant>>(populationSize);
-            
-            for (int i = 0; i < populationSize; i++)
+
+            for (var i = 0; i < populationSize; i++)
             {
                 // Random size between 2 and _maxOrder FOMs per candidate
-                int candidateSize = _random.Next(2, Math.Min(_maxOrder + 1, foms.Count));
+                var candidateSize = _random.Next(2, Math.Min(_maxOrder + 1, foms.Count));
                 var candidate = new List<IMutant>();
                 
                 // Select random FOMs without replacement
                 var availableFoms = new List<IMutant>(foms);
-                for (int j = 0; j < candidateSize && availableFoms.Count > 0; j++)
+                for (var j = 0; j < candidateSize && availableFoms.Count > 0; j++)
                 {
-                    int index = _random.Next(availableFoms.Count);
+                    var index = _random.Next(availableFoms.Count);
                     candidate.Add(availableFoms[index]);
                     availableFoms.RemoveAt(index);
                 }
@@ -187,10 +231,10 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             
             // 1. Diversity of mutation operators
             var mutationTypes = new HashSet<string>();
-            foreach (var mutant in candidate)
+            foreach (var mutant in candidate)   
             {
                 // Store some identifier of the mutation type
-                string mutationType = mutant.Mutation.Type.ToString();
+                var mutationType = mutant.Mutation.Type.ToString();
                 mutationTypes.Add(mutationType);
             }
             score += mutationTypes.Count * 0.5; // Bonus for diversity
@@ -202,7 +246,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                 var intersection = candidate[0].KillingTests;
 
                 // If there are no overlapping tests, intersection will be null
-                for (int i = 1; i < candidate.Count && intersection != null; i++)
+                for (var i = 1; i < candidate.Count && intersection != null; i++)
                 {
                     intersection = intersection.Intersect(candidate[i].KillingTests);
                 }
@@ -215,8 +259,8 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                     {
                         // Since we don't have direct access to test count, approximate based on string representation
                         // In a real implementation, this would use proper test count methods
-                        int totalTests = 1; // Default to 1 for calculation purposes
-                        int overlapTests = 1;
+                        var totalTests = 1; // Default to 1 for calculation purposes
+                        var overlapTests = 1;
                         // When ITestIdentifiers implements proper count methods, replace with actual counts
                         if (totalTests > 0)
                         {
@@ -228,8 +272,8 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                     averageOverlap /= candidate.Count;
                     
                     // Prefer candidates where 25%-75% of tests overlap (bell curve centered at 50%)
-                    double targetOverlap = 0.5;
-                    double overlapScore = 1.0 - Math.Abs(averageOverlap - targetOverlap) * 2.0;
+                    var targetOverlap = 0.5;
+                    var overlapScore = 1.0 - Math.Abs(averageOverlap - targetOverlap) * 2.0;
                     score += Math.Max(0, overlapScore) * 3.0; // Heavy weight on good overlap
                 }
             }
@@ -245,18 +289,19 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         /// </summary>
         private List<IMutant> TournamentSelection(
             List<List<IMutant>> population,
-            Dictionary<string, double> candidateScores)
+            Dictionary<string, double> candidateScores,
+            Dictionary<List<IMutant>, string> candidateKeys)
         {
             // Randomly select candidates for the tournament
             var tournament = new List<List<IMutant>>();
-            for (int i = 0; i < _tournamentSize; i++)
+            for (var i = 0; i < _tournamentSize; i++)
             {
-                int randomIndex = _random.Next(population.Count);
+                var randomIndex = _random.Next(population.Count);
                 tournament.Add(population[randomIndex]);
             }
             
             // Return the candidate with the highest score
-            return tournament.OrderByDescending(c => candidateScores[GetCandidateKey(c)])
+            return tournament.OrderByDescending(c => candidateScores[candidateKeys[c]])
                 .First();
         }
 
@@ -266,7 +311,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         private List<IMutant> Crossover(List<IMutant> parent1, List<IMutant> parent2)
         {
             // Simple one-point crossover
-            int crossoverPoint = _random.Next(Math.Min(parent1.Count, parent2.Count));
+            var crossoverPoint = _random.Next(Math.Min(parent1.Count, parent2.Count));
             
             var child = new List<IMutant>();
             // Take FOMs from parent1 up to crossover point
@@ -317,7 +362,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             // 2. Remove a random FOM
             // 3. Replace a FOM with another one
             
-            int operation = _random.Next(3);
+            var operation = _random.Next(3);
             var candidateIds = new HashSet<int>(candidate.Select(m => m.Id));
             
             switch (operation)
@@ -330,9 +375,9 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                             .Where(m => !candidateIds.Contains(m.Id))
                             .ToList();
                         
-                        if (availableIds.Any())
+                        if (availableIds.Count > 0)
                         {
-                            int randomIndex = _random.Next(availableIds.Count);
+                            var randomIndex = _random.Next(availableIds.Count);
                             candidate.Add(availableIds[randomIndex]);
                         }
                     }
@@ -341,7 +386,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                 case 1: // Remove
                     if (candidate.Count > 2) // Keep minimum size of 2
                     {
-                        int removeIndex = _random.Next(candidate.Count);
+                        var removeIndex = _random.Next(candidate.Count);
                         candidate.RemoveAt(removeIndex);
                     }
                     break;
@@ -349,30 +394,53 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                 case 2: // Replace
                     if (availableFOMs.Count > candidateIds.Count)
                     {
-                        int replaceIndex = _random.Next(candidate.Count);
-                        int oldId = candidate[replaceIndex].Id;
+                        var replaceIndex = _random.Next(candidate.Count);
+                        var oldId = candidate[replaceIndex].Id;
                         
                         // Find a FOM not in the candidate
                         var availableIds = availableFOMs
                             .Where(m => !candidateIds.Contains(m.Id) || m.Id == oldId)
                             .ToList();
                         
-                        if (availableIds.Any())
+                        if (availableIds.Count > 0)
                         {
-                            int randomIndex = _random.Next(availableIds.Count);
+                            var randomIndex = _random.Next(availableIds.Count);
                             candidate[replaceIndex] = availableIds[randomIndex];
                         }
                     }
                     break;
             }
+            
+            // Remove the candidate from the key cache since it's been mutated
+            _candidateKeyCache.Remove(candidate);
+        }
+
+        /// <summary>
+        /// Gets the cached key for a candidate or calculates it if not cached.
+        /// </summary>
+        private string GetCandidateKey(List<IMutant> candidate)
+        {
+            if (!_candidateKeyCache.TryGetValue(candidate, out var key))
+            {
+                key = CalculateCandidateKey(candidate);
+                _candidateKeyCache[candidate] = key;
+            }
+            return key;
         }
 
         /// <summary>
         /// Creates a unique key for a candidate HOM based on the IDs of its constituent mutants.
         /// </summary>
-        private string GetCandidateKey(List<IMutant> candidate)
+        private static string CalculateCandidateKey(List<IMutant> candidate) => string.Join(",", candidate.OrderBy(m => m.Id).Select(m => m.Id));
+
+        /// <summary>
+        /// Comparer for lists of mutants based on reference equality.
+        /// </summary>
+        private class CandidateEqualityComparer : IEqualityComparer<List<IMutant>>
         {
-            return string.Join(",", candidate.OrderBy(m => m.Id).Select(m => m.Id));
+            public bool Equals(List<IMutant> x, List<IMutant> y) => ReferenceEquals(x, y);
+
+            public int GetHashCode(List<IMutant> obj) => RuntimeHelpers.GetHashCode(obj);
         }
     }
 }
