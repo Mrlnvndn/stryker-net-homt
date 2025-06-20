@@ -38,16 +38,14 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
                 heuristic.Initialize(availableFOMs, options, mutationTestInput);
             }
         }
-        
+
         /// <summary>
         /// Registers a new heuristic.
         /// </summary>
         /// <param name="heuristic">The heuristic to register.</param>
-        public void RegisterHeuristic(IHOMHeuristic heuristic)
-        {
+        public void RegisterHeuristic(IHOMHeuristic heuristic) => 
             _registeredHeuristics.Add(heuristic);
-        }
-        
+
         /// <summary>
         /// Gets all scoring heuristics.
         /// </summary>

@@ -11,8 +11,7 @@ using Microsoft.CodeAnalysis;
 namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
 {
     /// <summary>
-    /// Implements a search-based algorithm for finding Higher-Order Mutants,
-    /// inspired by the prioritized search (search_pri) from Wong et al. 2020.
+    /// Implements a search-based algorithm for finding Higher-Order Mutants
     /// </summary>
     public class SearchAlgorithm : IHOMSearchAlgorithm
     {
@@ -39,12 +38,12 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             var generatedCandidates = new HashSet<string>(StringComparer.Ordinal);
 
             // Maximum mutation order to consider (most SSHOMs are composed of at most 4 FOMs)
-            int maxOrder = 4;
+            var maxOrder = 4;
 
             // Optional limit on the number of candidates to generate
             // Assuming a default value since IStrykerOptions doesn't have HigherOrder property in this context
-            int maxCandidates = 1000; // Default value
-            int generatedCount = 0;
+            var maxCandidates = 1000; // Default value
+            var generatedCount = 0;
 
             // Dictionary to store FOMs grouped by their killing tests signature
             var fomsByKillingTests = GroupFomsByKillingTests(fomList);
@@ -63,7 +62,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             foreach (var group in fomsByKillingTests.Values.Where(g => g.Count >= 2))
             {
                 // Generate combinations within the group, limiting to maxOrder
-                for (int order = 2; order <= Math.Min(maxOrder, group.Count); order++)
+                for (var order = 2; order <= Math.Min(maxOrder, group.Count); order++)
                 {
                     foreach (var candidate in GenerateCombinations(group, order))
                     {
