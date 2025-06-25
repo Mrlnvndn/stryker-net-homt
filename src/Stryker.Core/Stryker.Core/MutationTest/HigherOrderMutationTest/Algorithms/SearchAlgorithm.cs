@@ -298,5 +298,19 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         {
             return string.Join(",", candidate.OrderBy(m => m.Id).Select(m => m.Id));
         }
+
+        public int Compute(int x)
+        {
+            bool M1Active = true; // Assume M1 is active
+            bool M2Active = true; // Assume M2 is active
+
+            return M1Active
+                ? (M2Active
+                    ? (x + 10) * x    // both M1 and M2 active: h = (x+10)*x
+                    : (x + 10) + x)   // only M1 active: M_1 = (x+10)+x
+                : (M2Active
+                    ? x * 10 * x      // only M2 active: M_2 = x*10*x
+                    : x * 10 + x);    // no mutants: original = x*10 + x
+        }
     }
 }

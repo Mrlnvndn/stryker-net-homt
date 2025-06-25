@@ -40,17 +40,52 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         private readonly Random _random;
 
         /// <summary>
+        /// Registry for accessing and using heuristics.
+        /// </summary>
+        private readonly HeuristicRegistry _heuristicRegistry;
+
+        /// <summary>
+        /// Options for Stryker configuration.
+        /// </summary>
+        private StrykerOptions _options;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="LocalSearchAlgorithm"/> class.
         /// </summary>
+        /// <param name="mutationTestInput">Mutation test input for additional context.</param>
+        /// <param name="heuristic">A legacy heuristic to guide the search.</param>
+        /// <param name="options">Stryker options.</param>
+        /// <param name="reporter">Reporter for timeout heuristic information.</param>
+        /// <param name="availableMutants">Available mutants for selection.</param>
+        /// <param name="executor">Executor for running mutants.</param>
         /// <param name="maxIterations">Maximum number of iterations for the search.</param>
         /// <param name="candidatePoolSize">Size of the candidate pool to maintain.</param>
         /// <param name="maxOrder">Maximum order (number of FOMs) to consider.</param>
-        public LocalSearchAlgorithm(int maxIterations = 10, int candidatePoolSize = 50, int maxOrder = 4)
+        public LocalSearchAlgorithm(
+            MutationTestInput mutationTestInput,
+            IHOMHeuristic heuristic,
+            IStrykerOptions options,
+            ITimeoutHeuristicReporter reporter,
+            IReadOnlyCollection<IMutant> availableMutants,
+            IMutantExecutor executor,
+            int maxIterations = 10,
+            int candidatePoolSize = 50, 
+            int maxOrder = 4)
         {
+            _options = options as StrykerOptions ?? new StrykerOptions();
             _maxIterations = maxIterations;
             _candidatePoolSize = candidatePoolSize;
             _maxOrder = maxOrder;
             _random = new Random();
+
+            // Initialize heuristic registry with all available heuristics
+            _heuristicRegistry = new HeuristicRegistry(availableMutants, options, mutationTestInput);
+
+            // For backward compatibility, register the provided legacy heuristic if it's not null
+            if (heuristic != null)
+            {
+                _heuristicRegistry.RegisterHeuristic(heuristic);
+            }
         }
 
         /// <summary>
@@ -67,24 +102,23 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             IStrykerOptions options,
             MutationTestInput input)
         {
-            // Create heuristic registry for simplified access to heuristic functions
-            var heuristicRegistry = new HeuristicRegistry(availableFOMs, options, input);
+            // Register additional heuristics
             foreach (var heuristic in heuristics)
             {
-                heuristicRegistry.RegisterHeuristic(heuristic);
+                _heuristicRegistry.RegisterHeuristic(heuristic);
             }
 
             // Track generated candidates to avoid duplicates
             var generatedCandidates = new HashSet<string>(StringComparer.Ordinal);
             
             // Initialize the candidate pool with promising starting points
-            var candidatePool = InitializeStartingPoints(availableFOMs, heuristicRegistry);
+            var candidatePool = InitializeStartingPoints(availableFOMs, _heuristicRegistry);
             
             // Score initial candidates
-            var scoredCandidates = ScoreAndRankCandidates(candidatePool, heuristicRegistry);
+            var scoredCandidates = ScoreAndRankCandidates(candidatePool, _heuristicRegistry);
             
             // Main local search loop
-            for (int iteration = 0; iteration < _maxIterations; iteration++)
+            for (var iteration = 0; iteration < _maxIterations; iteration++)
             {
                 var newCandidates = new List<List<IMutant>>();
                 
@@ -92,7 +126,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                 foreach (var candidate in scoredCandidates)
                 {
                     // Generate neighborhood using heuristic suggestions
-                    var neighbors = ExploreNeighborhood(candidate.Candidate, availableFOMs, heuristicRegistry);
+                    var neighbors = ExploreNeighborhood(candidate.Candidate, availableFOMs, _heuristicRegistry);
                     newCandidates.AddRange(neighbors);
                 }
                 
@@ -106,7 +140,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                         generatedCandidates.Add(candidateKey);
                         
                         // Only yield if the candidate is not filtered by heuristics
-                        if (!heuristicRegistry.ShouldFilterCandidate(candidate))
+                        if (!_heuristicRegistry.ShouldFilterCandidate(candidate))
                         {
                             yield return candidate;
                         }
@@ -116,7 +150,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                 }
                 
                 // Rerank and prune the candidate pool to maintain manageable size
-                scoredCandidates = ScoreAndRankCandidates(candidatePool, heuristicRegistry)
+                scoredCandidates = ScoreAndRankCandidates(candidatePool, _heuristicRegistry)
                     .Take(_candidatePoolSize)
                     .ToList();
                 
@@ -194,9 +228,12 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             // If we don't have enough suggestions, perform systematic neighborhood exploration
             if (neighbors.Count < 5)
             {
-                neighbors.AddRange(GenerateAdditionNeighbors(candidate, availableFOMs));
+                if (candidate.Count < _maxOrder)
+                {
+                    neighbors.AddRange(GenerateAdditionNeighbors(candidate, availableFOMs));
+                }
                 neighbors.AddRange(GenerateRemovalNeighbors(candidate));
-                neighbors.AddRange(GenerateSwapNeighbors(candidate, availableFOMs));
+                //neighbors.AddRange(GenerateSwapNeighbors(candidate, availableFOMs));
             }
             
             // Take a random sample if we have too many neighbors
@@ -248,20 +285,22 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         /// </summary>
         /// <param name="candidate">The candidate HOM.</param>
         /// <returns>List of new candidates with one FOM removed.</returns>
-        private List<List<IMutant>> GenerateRemovalNeighbors(List<IMutant> candidate)
+        private static List<List<IMutant>> GenerateRemovalNeighbors(List<IMutant> candidate)
         {
             var neighbors = new List<List<IMutant>>();
             
-            // Only remove if we have more than 2 FOMs
-            if (candidate.Count > 2)
+            // If candidate is of order 2 or below, do generate any removal neighbors
+            if (candidate.Count <= 2)
             {
-                for (int i = 0; i < candidate.Count; i++)
-                {
-                    var newCandidate = new List<IMutant>(candidate);
-                    newCandidate.RemoveAt(i);
-                    neighbors.Add(newCandidate);
-                }
+                return neighbors;
             }
+
+            for (var i = 0; i < candidate.Count; i++)
+            {
+                var newCandidate = new List<IMutant>(candidate);
+                newCandidate.RemoveAt(i);
+                neighbors.Add(newCandidate);
+            }            
             
             return neighbors;
         }
