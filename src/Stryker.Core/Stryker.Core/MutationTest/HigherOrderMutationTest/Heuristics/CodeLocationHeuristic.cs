@@ -10,7 +10,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
 {
     /// <summary>
     /// Heuristic that scores candidates based on whether their FOMs come from the same method or class.
-    /// Clean reimplementation to avoid duplicate definition issues.
+    /// This is primarily a FITNESS SCORING heuristic that evaluates mutant location proximity.
     /// </summary>
     public class CodeLocationHeuristic : BaseHOMHeuristic
     {
@@ -30,7 +30,12 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// <summary>
         /// This heuristic is for scoring, not for search guidance.
         /// </summary>
-        public override bool CanGuideSearch => false;
+        public override bool IsSearchStrategyHeuristic => false;
+        
+        /// <summary>
+        /// This is purely a fitness scoring heuristic.
+        /// </summary>
+        public override bool IsFitnessScoringHeuristic => true;
 
         /// <summary>
         /// Called after the heuristic is initialized. Override to perform additional initialization.

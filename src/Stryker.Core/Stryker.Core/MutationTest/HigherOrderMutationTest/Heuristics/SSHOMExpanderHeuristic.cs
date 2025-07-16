@@ -6,7 +6,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
 {
     /// <summary>
     /// A heuristic that guides search by expanding existing SSHOMs with additional FOMs.
-    /// This heuristic focuses on search guidance rather than just scoring.
+    /// This heuristic is primarily a SEARCH STRATEGY heuristic but also provides fitness scoring.
     /// </summary>
     public class SSHOMExpanderHeuristic : BaseHOMHeuristic
     {
@@ -28,7 +28,18 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// <summary>
         /// This heuristic can actively guide the search process
         /// </summary>
-        public override bool CanGuideSearch => true;
+        public override bool IsSearchStrategyHeuristic => true;
+        
+        /// <summary>
+        /// Gets the weight of this heuristic when used in scoring.
+        /// This is both a search strategy and a scoring heuristic.
+        /// </summary>
+        public override double Weight => 2.0;
+        
+        /// <summary>
+        /// This heuristic provides fitness scoring.
+        /// </summary>
+        public override bool IsFitnessScoringHeuristic => true;
         
         /// <summary>
         /// Initializes a new instance of the <see cref="SSHOMExpanderHeuristic"/> class.

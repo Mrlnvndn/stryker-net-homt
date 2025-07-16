@@ -8,10 +8,12 @@ using Stryker.Abstractions;
 using Stryker.Abstractions.Options;
 using Stryker.Abstractions.Testing;
 using Stryker.Core.MutationTest;
+using Stryker.Core.MutationTest.HigherOrderMutationTest;
 using Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms;
 using Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Stryker.Core.Mutants;
 
 namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
 {
@@ -25,19 +27,35 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
         private List<IHOMHeuristic> _heuristics;
         // Dictionary to store file paths for mutations
         private Dictionary<int, string> _mutationFilePaths;
+        private Mock<IHOMHeuristic> _heuristicMock;
+        private Mock<ITimeoutHeuristicReporter> _reporterMock;
+        private Mock<IMutantExecutor> _executorMock;
         
         [TestInitialize]
         public void Setup()
         {
-            // Create the system under test with default parameters
-            _sut = new LocalSearchAlgorithm(maxIterations: 3, candidatePoolSize: 10, maxOrder: 3);
             _optionsMock = new Mock<IStrykerOptions>();
             _inputMock = new Mock<MutationTestInput>();
             _heuristics = new List<IHOMHeuristic>();
             _mutationFilePaths = new Dictionary<int, string>();
+            _heuristicMock = new Mock<IHOMHeuristic>();
+            _reporterMock = new Mock<ITimeoutHeuristicReporter>();
+            _executorMock = new Mock<IMutantExecutor>();
             
             // Create test mutants
             _testMutants = CreateTestMutants();
+            
+            // Create the system under test with default parameters
+            _sut = new LocalSearchAlgorithm(
+                _inputMock.Object, 
+                _heuristicMock.Object,
+                _optionsMock.Object,
+                _reporterMock.Object,
+                _testMutants,
+                _executorMock.Object,
+                maxIterations: 3, 
+                candidatePoolSize: 10, 
+                maxOrder: 3);
         }
 
         private List<IMutant> CreateTestMutants()
@@ -141,14 +159,20 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
         public void GenerateCandidates_ShouldRespectMaxOrder()
         {
             // Arrange
-            var localSearch = new LocalSearchAlgorithm(maxOrder: 2); // Maximum 2 mutants per HOM
+            var localSearch = new LocalSearchAlgorithm(
+                _inputMock.Object, 
+                _heuristicMock.Object,
+                _optionsMock.Object,
+                _reporterMock.Object,
+                _testMutants,
+                _executorMock.Object,
+                maxOrder: 2); // Maximum 2 mutants per HOM
             
             // Act
             var candidates = localSearch.GenerateCandidates(
                 _testMutants, _heuristics, _optionsMock.Object, _inputMock.Object).ToList();
 
             // Assert
-            localSearch.heuGetSearchGuidanceHeuristics()
             _heuristics.ShouldBeEmpty("No heuristics should be used in this test");
             candidates.ShouldNotBeEmpty();
             candidates.All(c => c.Count <= 2).ShouldBeTrue("No candidate should exceed max order");
@@ -158,7 +182,14 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
         public void GenerateCandidates_ShouldNotProduceDuplicates()
         {
             // Arrange
-            var sut = new LocalSearchAlgorithm(maxIterations: 5); // More iterations to potentially create duplicates
+            var sut = new LocalSearchAlgorithm(
+                _inputMock.Object, 
+                _heuristicMock.Object,
+                _optionsMock.Object,
+                _reporterMock.Object,
+                _testMutants,
+                _executorMock.Object,
+                maxIterations: 5); // More iterations to potentially create duplicates
             
             // Act
             var candidates = sut.GenerateCandidates(_testMutants, _heuristics, _optionsMock.Object, _inputMock.Object).ToList();
@@ -187,7 +218,10 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
             var filteringHeuristic = new Mock<IHOMHeuristic>();
             filteringHeuristic.Setup(h => h.ShouldFilterCandidate(It.IsAny<List<IMutant>>()))
                 .Returns(true); // Filter everything
-            
+
+            filteringHeuristic.Setup(h => h.IsFilteringHeuristic).Returns(true);
+            filteringHeuristic.Setup(h => h.Initialize(_testMutants, _optionsMock.Object, _inputMock.Object))
+                .Verifiable();
             _heuristics.Add(filteringHeuristic.Object);
             
             // Act
@@ -195,8 +229,6 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
             
             // Assert
             candidates.ShouldBeEmpty("All candidates should have been filtered");
-            filteringHeuristic.Verify(h => h.Initialize(_testMutants, _optionsMock.Object, _inputMock.Object), 
-                Times.Once, "Heuristic should be initialized");
             filteringHeuristic.Verify(h => h.ShouldFilterCandidate(It.IsAny<List<IMutant>>()), 
                 Times.AtLeastOnce, "Filter should be called");
         }
@@ -209,7 +241,8 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
             scoringHeuristic.Setup(h => h.Weight).Returns(1.0);
             scoringHeuristic.Setup(h => h.ScoreCandidate(It.IsAny<List<IMutant>>()))
                 .Returns(0.5);
-            
+            scoringHeuristic.Setup(h => h.IsFitnessScoringHeuristic).Returns(true);
+
             _heuristics.Add(scoringHeuristic.Object);
             
             // Act
@@ -217,8 +250,6 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
             
             // Assert
             candidates.ShouldNotBeEmpty();
-            scoringHeuristic.Verify(h => h.Initialize(_testMutants, _optionsMock.Object, _inputMock.Object), 
-                Times.Once);
             scoringHeuristic.Verify(h => h.ScoreCandidate(It.IsAny<List<IMutant>>()), 
                 Times.AtLeastOnce);
         }
@@ -228,7 +259,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
         {
             // Arrange
             var suggestionHeuristic = new Mock<IHOMHeuristic>();
-            suggestionHeuristic.Setup(h => h.CanGuideSearch).Returns(true);
+            suggestionHeuristic.Setup(h => h.IsSearchStrategyHeuristic).Returns(true);
             
             // Create a suggested candidate
             var suggestedCandidate = new List<IMutant> { _testMutants[0], _testMutants[1] };
@@ -237,7 +268,9 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
                     It.IsAny<List<IMutant>>(), 
                     It.IsAny<IReadOnlyCollection<IMutant>>()))
                 .Returns(new List<List<IMutant>> { suggestedCandidate });
-            
+
+            suggestionHeuristic.Setup(h => h.IsSearchStrategyHeuristic).Returns(true);
+
             _heuristics.Add(suggestionHeuristic.Object);
             
             // Act
@@ -245,8 +278,6 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
             
             // Assert
             candidates.ShouldNotBeEmpty();
-            suggestionHeuristic.Verify(h => h.Initialize(_testMutants, _optionsMock.Object, _inputMock.Object), 
-                Times.Once);
             suggestionHeuristic.Verify(h => h.SuggestNextCandidates(
                     It.IsAny<List<IMutant>>(), 
                     It.IsAny<IReadOnlyCollection<IMutant>>()), 

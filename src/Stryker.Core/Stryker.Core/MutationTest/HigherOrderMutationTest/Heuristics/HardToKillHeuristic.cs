@@ -8,6 +8,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
     /// <summary>
     /// A heuristic that prioritizes FOMs that are harder to kill (killed by fewer tests).
     /// Research suggests that harder-to-kill FOMs are more likely to form SSHOMs.
+    /// This is primarily a FITNESS SCORING heuristic.
     /// </summary>
     public class HardToKillHeuristic : BaseHOMHeuristic
     {
@@ -31,6 +32,11 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// Hard-to-kill FOMs are very important for finding SSHOMs.
         /// </summary>
         public override double Weight => 2.5;
+        
+        /// <summary>
+        /// This is purely a fitness scoring heuristic.
+        /// </summary>
+        public override bool IsFitnessScoringHeuristic => true;
         
         /// <summary>
         /// Performs additional initialization to calculate killing test counts for each FOM

@@ -7,7 +7,7 @@ using Stryker.Abstractions.Options;
 using Stryker.Abstractions.Testing;
 using Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms;
 using Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics;
-using Stryker.Utilities.Logging; // Assuming ApplicationLogging is accessible here for LoggerFactory
+using Stryker.Utilities.Logging;
 
 namespace Stryker.Core.MutationTest.HigherOrderMutationTest
 {

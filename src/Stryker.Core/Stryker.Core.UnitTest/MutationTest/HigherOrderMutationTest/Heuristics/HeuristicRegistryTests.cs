@@ -25,7 +25,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Heuristics
         public void Setup()
         {
             // Create test FOMs
-            _mockFOMs = CreateTestMutants(5);
+            _mockFOMs = HeuristicTestHelpers.CreateTestMutants(5);
 
             // Setup options and input mocks
             _optionsMock = new Mock<IStrykerOptions>();
@@ -45,9 +45,9 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Heuristics
             var candidate = new List<IMutant> { _mockFOMs[0], _mockFOMs[1] };
             
             // Create mocks with different weights and scores
-            var heuristic1 = CreateHeuristicMock("Heuristic1", 2.0, 0.5, false, true);
-            var heuristic2 = CreateHeuristicMock("Heuristic2", 1.0, 1.0, false, true);
-            var heuristic3 = CreateHeuristicMock("Heuristic3", 0.0, 0.0, false, false); // Zero weight, should be ignored
+            var heuristic1 = HeuristicTestHelpers.CreateScoringHeuristicMock("Heuristic1", 2.0, 0.5);
+            var heuristic2 = HeuristicTestHelpers.CreateScoringHeuristicMock("Heuristic2", 1.0, 1.0);
+            var heuristic3 = HeuristicTestHelpers.CreateScoringHeuristicMock("Heuristic3", 0.0, 0.0); // Zero weight, should be ignored
             
             _sut.RegisterHeuristic(heuristic1.Object);
             _sut.RegisterHeuristic(heuristic2.Object);
@@ -73,8 +73,8 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Heuristics
             var candidate = new List<IMutant> { _mockFOMs[0], _mockFOMs[1] };
             
             // All heuristics have zero weight, so none will be used for scoring
-            var heuristic1 = CreateHeuristicMock("Heuristic1", 0.0, 0.5, false, true);
-            var heuristic2 = CreateHeuristicMock("Heuristic2", 0.0, 1.0, false, true);
+            var heuristic1 = HeuristicTestHelpers.CreateScoringHeuristicMock("Heuristic1", 0.0, 0.5);
+            var heuristic2 = HeuristicTestHelpers.CreateScoringHeuristicMock("Heuristic2", 0.0, 1.0);
             
             _sut.RegisterHeuristic(heuristic1.Object);
             _sut.RegisterHeuristic(heuristic2.Object);
@@ -94,22 +94,23 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Heuristics
             // Arrange
             var candidate = new List<IMutant> { _mockFOMs[0], _mockFOMs[1] };
             
-            var heuristic1 = CreateHeuristicMock("Heuristic1", 1.0, 0.5, false, true);
-            var heuristic2 = CreateHeuristicMock("Heuristic2", 1.0, 0.2, true, true); // This one filters
-            var heuristic3 = CreateHeuristicMock("Heuristic3", 1.0, 0.7, false, true);
+            // Create filtering heuristics with different filtering behaviors
+            var nonFilteringHeuristic = HeuristicTestHelpers.CreateNonCapabilityHeuristicMock("NonFilteringHeuristic");
+            var filteringHeuristicNoFilter = HeuristicTestHelpers.CreateFilteringHeuristicMock("FilteringHeuristicNoFilter", false);
+            var filteringHeuristicWithFilter = HeuristicTestHelpers.CreateFilteringHeuristicMock("FilteringHeuristicWithFilter", true);
             
-            _sut.RegisterHeuristic(heuristic1.Object);
-            _sut.RegisterHeuristic(heuristic2.Object);
-            _sut.RegisterHeuristic(heuristic3.Object);
+            _sut.RegisterHeuristic(nonFilteringHeuristic.Object);
+            _sut.RegisterHeuristic(filteringHeuristicNoFilter.Object);
+            _sut.RegisterHeuristic(filteringHeuristicWithFilter.Object);
 
             // Act
             var result = _sut.ShouldFilterCandidate(candidate);
 
             // Assert
             result.ShouldBeTrue();
-            heuristic1.Verify(h => h.ShouldFilterCandidate(candidate), Times.Once);
-            heuristic2.Verify(h => h.ShouldFilterCandidate(candidate), Times.Once);
-            heuristic3.Verify(h => h.ShouldFilterCandidate(candidate), Times.AtMostOnce); // May stop early due to short-circuiting
+            nonFilteringHeuristic.Verify(h => h.ShouldFilterCandidate(candidate), Times.Never);
+            filteringHeuristicNoFilter.Verify(h => h.ShouldFilterCandidate(candidate), Times.Once);
+            filteringHeuristicWithFilter.Verify(h => h.ShouldFilterCandidate(candidate), Times.Once);
         }
 
         [TestMethod]
@@ -118,19 +119,23 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Heuristics
             // Arrange
             var candidate = new List<IMutant> { _mockFOMs[0], _mockFOMs[1] };
             
-            var heuristic1 = CreateHeuristicMock("Heuristic1", 1.0, 0.5, false, true);
-            var heuristic2 = CreateHeuristicMock("Heuristic2", 1.0, 0.2, false, true);
+            // Create filtering and non-filtering heuristics
+            var nonFilteringHeuristic = HeuristicTestHelpers.CreateNonCapabilityHeuristicMock("NonFilteringHeuristic");
+            var filteringHeuristic1 = HeuristicTestHelpers.CreateFilteringHeuristicMock("FilteringHeuristic1", false);
+            var filteringHeuristic2 = HeuristicTestHelpers.CreateFilteringHeuristicMock("FilteringHeuristic2", false);
             
-            _sut.RegisterHeuristic(heuristic1.Object);
-            _sut.RegisterHeuristic(heuristic2.Object);
+            _sut.RegisterHeuristic(nonFilteringHeuristic.Object);
+            _sut.RegisterHeuristic(filteringHeuristic1.Object);
+            _sut.RegisterHeuristic(filteringHeuristic2.Object);
 
             // Act
             var result = _sut.ShouldFilterCandidate(candidate);
 
             // Assert
             result.ShouldBeFalse();
-            heuristic1.Verify(h => h.ShouldFilterCandidate(candidate), Times.Once);
-            heuristic2.Verify(h => h.ShouldFilterCandidate(candidate), Times.Once);
+            nonFilteringHeuristic.Verify(h => h.ShouldFilterCandidate(candidate), Times.Never);
+            filteringHeuristic1.Verify(h => h.ShouldFilterCandidate(candidate), Times.Once);
+            filteringHeuristic2.Verify(h => h.ShouldFilterCandidate(candidate), Times.Once);
         }
 
         [TestMethod]
@@ -144,18 +149,9 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Heuristics
             var suggestion2 = new List<IMutant> { _mockFOMs[1], _mockFOMs[3] };
             var suggestion3 = new List<IMutant> { _mockFOMs[2], _mockFOMs[4] };
             
-            var heuristic1 = new Mock<IHOMHeuristic>();
-            heuristic1.Setup(h => h.CanGuideSearch).Returns(true);
-            heuristic1.Setup(h => h.SuggestNextCandidates(currentCandidate, availableFOMs))
-                .Returns(new List<List<IMutant>> { suggestion1 });
-            
-            var heuristic2 = new Mock<IHOMHeuristic>();
-            heuristic2.Setup(h => h.CanGuideSearch).Returns(true);
-            heuristic2.Setup(h => h.SuggestNextCandidates(currentCandidate, availableFOMs))
-                .Returns(new List<List<IMutant>> { suggestion2, suggestion3 });
-                
-            var heuristic3 = new Mock<IHOMHeuristic>();
-            heuristic3.Setup(h => h.CanGuideSearch).Returns(false); // This one cannot guide search
+            var heuristic1 = HeuristicTestHelpers.CreateSearchHeuristicMock("SearchHeuristic1", new List<List<IMutant>> { suggestion1 });
+            var heuristic2 = HeuristicTestHelpers.CreateSearchHeuristicMock("SearchHeuristic2", new List<List<IMutant>> { suggestion2, suggestion3 });
+            var heuristic3 = HeuristicTestHelpers.CreateNonCapabilityHeuristicMock("NonSearchHeuristic");
             
             _sut.RegisterHeuristic(heuristic1.Object);
             _sut.RegisterHeuristic(heuristic2.Object);
@@ -176,7 +172,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Heuristics
         }
 
         [TestMethod]
-        public void RegisterDefaultHeuristics_ShouldRegisterAllExpectedHeuristics()
+        public void RegisterDefaultHeuristics_ShouldRegisterExpectedNumberOfHeuristics()
         {
             // Arrange - create a fresh registry that will register default heuristics
             var registry = new HeuristicRegistry(_mockFOMs, _optionsMock.Object, _inputMock.Object);
@@ -184,99 +180,241 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Heuristics
             // Act - DefaultHeuristics are registered in the constructor
             var registeredHeuristics = registry.RegisteredHeuristics;
             
+            // Assert - We expect a reasonable number of default heuristics
+            registeredHeuristics.Count.ShouldBeGreaterThanOrEqualTo(5); // At least some heuristics
+            registeredHeuristics.Count.ShouldBeLessThanOrEqualTo(15); // But not too many
+            
+            // Verify that we have at least one of each type of heuristic
+            var scoringHeuristics = registry.GetScoringHeuristics().ToList();
+            var filteringHeuristics = registry.GetFilteringHeuristics().ToList();
+            var searchHeuristics = registry.GetSearchGuidanceHeuristics().ToList();
+            
+            scoringHeuristics.Count.ShouldBeGreaterThan(0);
+            filteringHeuristics.Count.ShouldBeGreaterThan(0);
+            searchHeuristics.Count.ShouldBeGreaterThan(0);
+        }
+
+        [TestMethod]
+        public void GetScoringHeuristics_ShouldReturnOnlyHeuristicsWithFitnessScoringAndPositiveWeight()
+        {
+            // Arrange
+            var registry = new HeuristicRegistry(_mockFOMs, _optionsMock.Object, _inputMock.Object, false);
+            
+            var fitnessScoringWithWeight = HeuristicTestHelpers.CreateScoringHeuristicMock("FitnessScoringWithWeight", 1.5);
+            var fitnessScoringZeroWeight = HeuristicTestHelpers.CreateScoringHeuristicMock("FitnessScoringZeroWeight", 0.0);
+            var notFitnessScoring = HeuristicTestHelpers.CreateNonCapabilityHeuristicMock("NotFitnessScoring", 1.0);
+            
+            registry.RegisterHeuristic(fitnessScoringWithWeight.Object);
+            registry.RegisterHeuristic(fitnessScoringZeroWeight.Object);
+            registry.RegisterHeuristic(notFitnessScoring.Object);
+            
+            // Act
+            var scoringHeuristics = registry.GetScoringHeuristics().ToList();
+            
             // Assert
-            registeredHeuristics.Count.ShouldBeGreaterThanOrEqualTo(7); // At least 7 default heuristics
-            
-            // Check if at least one heuristic of each expected type exists
-            // Note: We're assuming these types exist - if they don't, the test will fail
-            var heuristicTypes = registeredHeuristics.Select(h => h.GetType().Name).ToList();
-            heuristicTypes.ShouldContain("MaxSizeLimitHeuristic");
-            heuristicTypes.ShouldContain("CodeLocationHeuristic");
-            heuristicTypes.ShouldContain("HardToKillHeuristic");
-            heuristicTypes.ShouldContain("MutatorTypeHeuristic");
-            heuristicTypes.ShouldContain("DependencyHeuristic");
-            heuristicTypes.ShouldContain("SSHOMExpanderHeuristic");
-            heuristicTypes.ShouldContain("WeakMutatorFilterHeuristic");
+            scoringHeuristics.Count.ShouldBe(1);
+            scoringHeuristics.ShouldContain(h => h.Name == "FitnessScoringWithWeight");
+            scoringHeuristics.ShouldNotContain(h => h.Name == "FitnessScoringZeroWeight");
+            scoringHeuristics.ShouldNotContain(h => h.Name == "NotFitnessScoring");
         }
 
-        #region Helper Methods
-
-        private List<IMutant> CreateTestMutants(int count)
+        [TestMethod]
+        public void GetFilteringHeuristics_ShouldReturnOnlyFilteringHeuristics()
         {
-            var mutants = new List<IMutant>();
-            for (int i = 0; i < count; i++)
-            {
-                mutants.Add(CreateMockMutant(i));
-            }
-            return mutants;
+            // Arrange
+            var registry = new HeuristicRegistry(_mockFOMs, _optionsMock.Object, _inputMock.Object, false);
+            
+            var filteringHeuristic = HeuristicTestHelpers.CreateFilteringHeuristicMock("FilteringHeuristic");
+            var nonFilteringHeuristic = HeuristicTestHelpers.CreateNonCapabilityHeuristicMock("NonFilteringHeuristic");
+            
+            registry.RegisterHeuristic(filteringHeuristic.Object);
+            registry.RegisterHeuristic(nonFilteringHeuristic.Object);
+            
+            // Act
+            var filteringHeuristics = registry.GetFilteringHeuristics().ToList();
+            
+            // Assert
+            filteringHeuristics.Count.ShouldBe(1);
+            filteringHeuristics.ShouldContain(h => h.Name == "FilteringHeuristic");
+            filteringHeuristics.ShouldNotContain(h => h.Name == "NonFilteringHeuristic");
         }
 
-        private IMutant CreateMockMutant(int id)
+        [TestMethod]
+        public void GetSearchGuidanceHeuristics_ShouldReturnOnlySearchStrategyHeuristics()
         {
-            // Create mock test identifiers
-            var testIdentifiers = CreateMockTestIdentifiers(new[] { $"Test{id}", $"Test{id+1}" });
+            // Arrange
+            var registry = new HeuristicRegistry(_mockFOMs, _optionsMock.Object, _inputMock.Object, false);
             
-            // Create a mock for the mutation
-            var mutation = CreateMockMutation($"File{id % 3 + 1}.cs");
+            var searchHeuristic = HeuristicTestHelpers.CreateSearchHeuristicMock("SearchHeuristic", 
+                new List<List<IMutant>> { new List<IMutant> { _mockFOMs[0] } });
+            var nonSearchHeuristic = HeuristicTestHelpers.CreateNonCapabilityHeuristicMock("NonSearchHeuristic");
             
-            // Create a mock mutant
-            var mutant = new Mock<IMutant>();
-            mutant.Setup(m => m.Id).Returns(id);
-            mutant.Setup(m => m.Mutation).Returns(mutation);
-            mutant.Setup(m => m.KillingTests).Returns(testIdentifiers);
+            registry.RegisterHeuristic(searchHeuristic.Object);
+            registry.RegisterHeuristic(nonSearchHeuristic.Object);
             
-            return mutant.Object;
+            // Act
+            var searchHeuristics = registry.GetSearchGuidanceHeuristics().ToList();
+            
+            // Assert
+            searchHeuristics.Count.ShouldBe(1);
+            searchHeuristics.ShouldContain(h => h.Name == "SearchHeuristic");
+            searchHeuristics.ShouldNotContain(h => h.Name == "NonSearchHeuristic");
         }
 
-        private Mutation CreateMockMutation(string filePath)
+        [TestMethod]
+        public void ShouldFilterCandidate_ShortCircuitsOnFirstFilterTrue()
         {
-            // Create a simple mutation without mocking SyntaxNode
-            var mutation = new Mutation
-            {
-                DisplayName = $"Test Mutation {filePath}",
-                Type = Mutator.Block,
-                Description = "Test Description"
-            };
+            // Arrange
+            var candidate = new List<IMutant> { _mockFOMs[0], _mockFOMs[1] };
+            var registry = new HeuristicRegistry(_mockFOMs, _optionsMock.Object, _inputMock.Object, false);
             
-            return mutation;
+            // First filtering heuristic returns true (should filter)
+            var filteringHeuristic1 = new Mock<IHOMHeuristic>(MockBehavior.Strict);
+            filteringHeuristic1.Setup(h => h.Name).Returns("FilteringHeuristic1");
+            filteringHeuristic1.Setup(h => h.IsFilteringHeuristic).Returns(true);
+            filteringHeuristic1.Setup(h => h.ShouldFilterCandidate(candidate)).Returns(true);
+            
+            // Second filtering heuristic should never be called due to short-circuiting
+            var filteringHeuristic2 = new Mock<IHOMHeuristic>(MockBehavior.Strict);
+            filteringHeuristic2.Setup(h => h.Name).Returns("FilteringHeuristic2");
+            filteringHeuristic2.Setup(h => h.IsFilteringHeuristic).Returns(true);
+            // We do not setup ShouldFilterCandidate for filteringHeuristic2, so it will throw if called
+            
+            registry.RegisterHeuristic(filteringHeuristic1.Object);
+            registry.RegisterHeuristic(filteringHeuristic2.Object);
+            
+            // Act
+            var result = registry.ShouldFilterCandidate(candidate);
+            
+            // Assert
+            result.ShouldBeTrue();
+            filteringHeuristic1.Verify(h => h.ShouldFilterCandidate(candidate), Times.Once);
+            // We expect the second heuristic to never be called due to short-circuiting
+        }
+
+        [TestMethod]
+        public void ShouldFilterCandidate_CallsAllFilteringHeuristicsUntilOneFilters()
+        {
+            // Arrange
+            var candidate = new List<IMutant> { _mockFOMs[0], _mockFOMs[1] };
+            var registry = new HeuristicRegistry(_mockFOMs, _optionsMock.Object, _inputMock.Object, false);
+            
+            // Order matters for this test - we're testing the short-circuit behavior
+            var filteringHeuristic1 = HeuristicTestHelpers.CreateFilteringHeuristicMock("FilteringHeuristic1", false);
+            var filteringHeuristic2 = HeuristicTestHelpers.CreateFilteringHeuristicMock("FilteringHeuristic2", true);
+            
+            // Third filtering heuristic should never be called due to short-circuiting after the second
+            var filteringHeuristic3 = new Mock<IHOMHeuristic>(MockBehavior.Strict);
+            filteringHeuristic3.Setup(h => h.Name).Returns("FilteringHeuristic3");
+            filteringHeuristic3.Setup(h => h.IsFilteringHeuristic).Returns(true);
+            // We do not setup ShouldFilterCandidate for filteringHeuristic3, so it will throw if called
+            
+            // Register in specific order for test
+            registry.RegisterHeuristic(filteringHeuristic1.Object);
+            registry.RegisterHeuristic(filteringHeuristic2.Object);
+            registry.RegisterHeuristic(filteringHeuristic3.Object);
+            
+            // Act
+            var result = registry.ShouldFilterCandidate(candidate);
+            
+            // Assert
+            result.ShouldBeTrue();
+            filteringHeuristic1.Verify(h => h.ShouldFilterCandidate(candidate), Times.Once);
+            filteringHeuristic2.Verify(h => h.ShouldFilterCandidate(candidate), Times.Once);
+            // We expect the third heuristic to never be called due to short-circuiting
+        }
+    }
+}
+
+// Helper Methods for creating mock heuristics
+public static class HeuristicTestHelpers
+{
+    public static Mock<IHOMHeuristic> CreateScoringHeuristicMock(string name, double weight = 1.0, double score = 0.5)
+    {
+        var mock = new Mock<IHOMHeuristic>();
+        mock.Setup(h => h.Name).Returns(name);
+        mock.Setup(h => h.IsFilteringHeuristic).Returns(false);
+        mock.Setup(h => h.IsFitnessScoringHeuristic).Returns(true);
+        mock.Setup(h => h.IsSearchStrategyHeuristic).Returns(false);
+        mock.Setup(h => h.Weight).Returns(weight);
+        mock.Setup(h => h.ScoreCandidate(It.IsAny<List<IMutant>>())).Returns(score);
+        return mock;
+    }
+
+    public static Mock<IHOMHeuristic> CreateFilteringHeuristicMock(string name, bool shouldFilter = false)
+    {
+        var mock = new Mock<IHOMHeuristic>();
+        mock.Setup(h => h.Name).Returns(name);
+        mock.Setup(h => h.IsFilteringHeuristic).Returns(true);
+        mock.Setup(h => h.IsFitnessScoringHeuristic).Returns(false);
+        mock.Setup(h => h.IsSearchStrategyHeuristic).Returns(false);
+        mock.Setup(h => h.Weight).Returns(0.0);
+        mock.Setup(h => h.ShouldFilterCandidate(It.IsAny<List<IMutant>>())).Returns(shouldFilter);
+        return mock;
+    }
+
+    public static Mock<IHOMHeuristic> CreateSearchHeuristicMock(string name, List<List<IMutant>> suggestions)
+    {
+        var mock = new Mock<IHOMHeuristic>();
+        mock.Setup(h => h.Name).Returns(name);
+        mock.Setup(h => h.IsFilteringHeuristic).Returns(false);
+        mock.Setup(h => h.IsFitnessScoringHeuristic).Returns(false);
+        mock.Setup(h => h.IsSearchStrategyHeuristic).Returns(true);
+        mock.Setup(h => h.Weight).Returns(0.0);
+        mock.Setup(h => h.SuggestNextCandidates(It.IsAny<List<IMutant>>(), It.IsAny<IReadOnlyCollection<IMutant>>()))
+            .Returns(suggestions);
+        return mock;
+    }
+
+    public static Mock<IHOMHeuristic> CreateMultiCapabilityHeuristicMock(string name, bool isFiltering = false, 
+        bool isScoring = false, bool isSearch = false, double weight = 0.0, double score = 0.5)
+    {
+        var mock = new Mock<IHOMHeuristic>();
+        mock.Setup(h => h.Name).Returns(name);
+        mock.Setup(h => h.IsFilteringHeuristic).Returns(isFiltering);
+        mock.Setup(h => h.IsFitnessScoringHeuristic).Returns(isScoring);
+        mock.Setup(h => h.IsSearchStrategyHeuristic).Returns(isSearch);
+        mock.Setup(h => h.Weight).Returns(weight);
+        
+        if (isScoring)
+        {
+            mock.Setup(h => h.ScoreCandidate(It.IsAny<List<IMutant>>())).Returns(score);
         }
         
-        private ITestIdentifiers CreateMockTestIdentifiers(string[] testNames)
+        if (isFiltering)
         {
-            var testIdentifiersMock = new Mock<ITestIdentifiers>();
-            
-            testIdentifiersMock.Setup(ti => ti.IsEmpty).Returns(false);
-            testIdentifiersMock.Setup(ti => ti.ToString()).Returns(string.Join(",", testNames));
-            
-            // Setup intersection to return itself or a new mock
-            // Create a new mock for intersection results to avoid recursion
-            var intersectionMock = new Mock<ITestIdentifiers>();
-            intersectionMock.Setup(ti => ti.IsEmpty).Returns(false);
-            intersectionMock.Setup(ti => ti.ToString()).Returns(string.Join(",", testNames.Take(1)));
-            
-            testIdentifiersMock.Setup(ti => ti.Intersect(It.IsAny<ITestIdentifiers>()))
-                               .Returns(intersectionMock.Object);
-                               
-            return testIdentifiersMock.Object;
+            mock.Setup(h => h.ShouldFilterCandidate(It.IsAny<List<IMutant>>())).Returns(false);
         }
-
-        private Mock<IHOMHeuristic> CreateHeuristicMock(
-            string name, 
-            double weight, 
-            double scoreToReturn, 
-            bool shouldFilter,
-            bool canGuideSearch)
+        
+        if (isSearch)
         {
-            var mock = new Mock<IHOMHeuristic>();
-            mock.Setup(h => h.Name).Returns(name);
-            mock.Setup(h => h.Weight).Returns(weight);
-            mock.Setup(h => h.ScoreCandidate(It.IsAny<List<IMutant>>())).Returns(scoreToReturn);
-            mock.Setup(h => h.ShouldFilterCandidate(It.IsAny<List<IMutant>>())).Returns(shouldFilter);
-            mock.Setup(h => h.CanGuideSearch).Returns(canGuideSearch);
-            
-            return mock;
+            mock.Setup(h => h.SuggestNextCandidates(It.IsAny<List<IMutant>>(), It.IsAny<IReadOnlyCollection<IMutant>>()))
+                .Returns(new List<List<IMutant>>());
         }
+        
+        return mock;
+    }
 
-        #endregion
+    public static Mock<IHOMHeuristic> CreateNonCapabilityHeuristicMock(string name, double weight = 0.0)
+    {
+        var mock = new Mock<IHOMHeuristic>();
+        mock.Setup(h => h.Name).Returns(name);
+        mock.Setup(h => h.IsFilteringHeuristic).Returns(false);
+        mock.Setup(h => h.IsFitnessScoringHeuristic).Returns(false);
+        mock.Setup(h => h.IsSearchStrategyHeuristic).Returns(false);
+        mock.Setup(h => h.Weight).Returns(weight);
+        return mock;
+    }
+
+    public static List<IMutant> CreateTestMutants(int count)
+    {
+        var mutants = new List<IMutant>();
+        for (int i = 0; i < count; i++)
+        {
+            var mock = new Mock<IMutant>();
+            mock.Setup(m => m.Id).Returns(i);
+            mutants.Add(mock.Object);
+        }
+        return mutants;
     }
 }

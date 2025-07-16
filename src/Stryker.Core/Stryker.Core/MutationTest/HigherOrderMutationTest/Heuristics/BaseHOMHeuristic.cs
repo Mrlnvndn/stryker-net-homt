@@ -9,6 +9,14 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
     /// <summary>
     /// Base class for Higher-Order Mutant (HOM) heuristics that provides default implementations
     /// for common functionality.
+    /// 
+    /// HOM heuristics can be categorized into three primary types:
+    /// 1. Filtering heuristics - Used to eliminate candidates that don't meet specific criteria
+    /// 2. Fitness scoring heuristics - Used to evaluate and rank candidates
+    /// 3. Search strategy heuristics - Used to guide the search process by suggesting new candidates
+    /// 
+    /// A heuristic can belong to multiple categories. For example, a heuristic might both filter
+    /// candidates and provide a fitness score.
     /// </summary>
     public abstract class BaseHOMHeuristic : IHOMHeuristic
     {
@@ -27,7 +35,19 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// Indicates whether this heuristic can guide the search process by suggesting candidates.
         /// Default is false.
         /// </summary>
-        public virtual bool CanGuideSearch => false;
+        public virtual bool IsSearchStrategyHeuristic => false;
+        
+        /// <summary>
+        /// Indicates whether this heuristic is used for filtering candidates.
+        /// Default is false.
+        /// </summary>
+        public virtual bool IsFilteringHeuristic => false;
+        
+        /// <summary>
+        /// Indicates whether this heuristic is used for fitness scoring of candidates.
+        /// Default is true if Weight > 0.
+        /// </summary>
+        public virtual bool IsFitnessScoringHeuristic => Weight > 0;
 
         /// <summary>
         /// Protected properties to store data used by the heuristic.

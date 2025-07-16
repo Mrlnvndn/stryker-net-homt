@@ -7,6 +7,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
     /// <summary>
     /// A heuristic that prioritizes certain mutation types that research suggests are more likely to form SSHOMs,
     /// such as relational operation removals and statement block removals.
+    /// This is primarily a FITNESS SCORING heuristic.
     /// </summary>
     public class MutatorTypeHeuristic : BaseHOMHeuristic
     {
@@ -29,6 +30,11 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// Medium weight for mutation type preference
         /// </summary>
         public override double Weight => 1.5;
+        
+        /// <summary>
+        /// This is purely a fitness scoring heuristic.
+        /// </summary>
+        public override bool IsFitnessScoringHeuristic => true;
         
         /// <summary>
         /// Initializes a new instance of the <see cref="MutatorTypeHeuristic"/> class with default

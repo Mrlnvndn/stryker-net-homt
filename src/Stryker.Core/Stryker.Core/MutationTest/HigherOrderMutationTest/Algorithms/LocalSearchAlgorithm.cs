@@ -78,9 +78,18 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             _maxOrder = maxOrder;
             _random = new Random();
 
-            // Initialize heuristic registry with all available heuristics
-            _heuristicRegistry = new HeuristicRegistry(availableMutants, options, mutationTestInput);
-
+            // Initialize heuristic registry with all available heuristics but without default heuristics
+            _heuristicRegistry = new HeuristicRegistry(availableMutants, options, mutationTestInput, registerDefaultHeuristics: false);
+            
+            // Register default heuristics with the correct max order limit
+            _heuristicRegistry.RegisterHeuristic(new MaxSizeLimitHeuristic(maxOrder));
+            
+            // Register other default heuristics that don't need max order configuration
+            _heuristicRegistry.RegisterHeuristic(new CodeLocationHeuristic());
+            _heuristicRegistry.RegisterHeuristic(new HardToKillHeuristic());
+            _heuristicRegistry.RegisterHeuristic(new MutatorTypeHeuristic());
+            _heuristicRegistry.RegisterHeuristic(new WeakMutatorFilterHeuristic());
+            
             // For backward compatibility, register the provided legacy heuristic if it's not null
             if (heuristic != null)
             {
@@ -116,7 +125,10 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             
             // Score initial candidates
             var scoredCandidates = ScoreAndRankCandidates(candidatePool, _heuristicRegistry);
-            
+
+            // Filter initial candidates
+            candidatePool.RemoveAll(_heuristicRegistry.ShouldFilterCandidate);
+
             // Main local search loop
             for (var iteration = 0; iteration < _maxIterations; iteration++)
             {
@@ -133,7 +145,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                 // Add new candidates to the pool, removing duplicates
                 foreach (var candidate in newCandidates)
                 {
-                    string candidateKey = GetCandidateKey(candidate);
+                    var candidateKey = GetCandidateKey(candidate);
                     
                     if (!generatedCandidates.Contains(candidateKey))
                     {
@@ -150,12 +162,10 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                 }
                 
                 // Rerank and prune the candidate pool to maintain manageable size
-                scoredCandidates = ScoreAndRankCandidates(candidatePool, _heuristicRegistry)
-                    .Take(_candidatePoolSize)
-                    .ToList();
+                scoredCandidates = [.. ScoreAndRankCandidates(candidatePool, _heuristicRegistry).Take(_candidatePoolSize)];
                 
                 // Update candidate pool with the best candidates
-                candidatePool = scoredCandidates.Select(sc => sc.Candidate).ToList();
+                candidatePool = [.. scoredCandidates.Select(sc => sc.Candidate)];
             }
         }
 
@@ -233,7 +243,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                     neighbors.AddRange(GenerateAdditionNeighbors(candidate, availableFOMs));
                 }
                 neighbors.AddRange(GenerateRemovalNeighbors(candidate));
-                //neighbors.AddRange(GenerateSwapNeighbors(candidate, availableFOMs));
+                neighbors.AddRange(GenerateSwapNeighbors(candidate, availableFOMs));
             }
             
             // Take a random sample if we have too many neighbors
@@ -289,7 +299,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         {
             var neighbors = new List<List<IMutant>>();
             
-            // If candidate is of order 2 or below, do generate any removal neighbors
+            // If candidate is of order 2 or below, do NOT generate any removal neighbors
             if (candidate.Count <= 2)
             {
                 return neighbors;
@@ -299,7 +309,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             {
                 var newCandidate = new List<IMutant>(candidate);
                 newCandidate.RemoveAt(i);
-                neighbors.Add(newCandidate);
+                neighbors.Add(newCandidate);            
             }            
             
             return neighbors;

@@ -6,6 +6,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
     /// <summary>
     /// A heuristic that filters out candidates that exceed a maximum size limit.
     /// Based on research suggesting HOMs should be limited to 4 or fewer FOMs.
+    /// This is primarily a FILTERING heuristic but also provides fitness scoring.
     /// </summary>
     public class MaxSizeLimitHeuristic : BaseHOMHeuristic
     {
@@ -29,9 +30,19 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         public override string Name => "MaxSizeLimit";
         
         /// <summary>
-        /// Maximum size isn't a scoring heuristic but a filter, so its weight in scoring is low.
+        /// Maximum size isn't primarily a scoring heuristic but a filter, so its weight in scoring is low.
         /// </summary>
         public override double Weight => 0.5;
+        
+        /// <summary>
+        /// This is primarily a filtering heuristic.
+        /// </summary>
+        public override bool IsFilteringHeuristic => true;
+        
+        /// <summary>
+        /// Also provides some fitness scoring with low weight.
+        /// </summary>
+        public override bool IsFitnessScoringHeuristic => true;
         
         /// <summary>
         /// Scores a candidate HOM based on its size relative to the maximum size.

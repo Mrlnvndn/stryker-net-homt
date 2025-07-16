@@ -51,21 +51,21 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// </summary>
         /// <returns>A collection of scoring heuristics.</returns>
         public IEnumerable<IHOMHeuristic> GetScoringHeuristics() => 
-            _registeredHeuristics.Where(h => h.Weight > 0);
+            _registeredHeuristics.Where(h => h.IsFitnessScoringHeuristic && h.Weight > 0);
         
         /// <summary>
         /// Gets all filtering heuristics.
         /// </summary>
         /// <returns>A collection of filtering heuristics.</returns>
         public IEnumerable<IHOMHeuristic> GetFilteringHeuristics() =>
-            _registeredHeuristics;
-            
+            _registeredHeuristics.Where(h => h.IsFilteringHeuristic);
+
         /// <summary>
         /// Gets all search guidance heuristics.
         /// </summary>
         /// <returns>A collection of search guidance heuristics.</returns>
         public IEnumerable<IHOMHeuristic> GetSearchGuidanceHeuristics() =>
-            _registeredHeuristics.Where(h => h.CanGuideSearch);
+            _registeredHeuristics.Where(h => h.IsSearchStrategyHeuristic);
             
         /// <summary>
         /// Scores a candidate HOM using all registered scoring heuristics.

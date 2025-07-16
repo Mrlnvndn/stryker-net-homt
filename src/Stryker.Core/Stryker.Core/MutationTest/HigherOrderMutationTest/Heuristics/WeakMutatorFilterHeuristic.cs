@@ -8,6 +8,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
     /// A heuristic that filters out FOMs with weak mutators that are easily killed by many tests.
     /// Research suggests that some mutation operators consistently produce weak mutants,
     /// which are less likely to contribute to valuable SSHOMs.
+    /// This is primarily a FILTERING heuristic but also provides fitness scoring.
     /// </summary>
     public class WeakMutatorFilterHeuristic : BaseHOMHeuristic
     {
@@ -30,6 +31,16 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// Gets the name of this heuristic.
         /// </summary>
         public override string Name => "WeakMutatorFilter";
+        
+        /// <summary>
+        /// This is primarily a filtering heuristic.
+        /// </summary>
+        public override bool IsFilteringHeuristic => true;
+        
+        /// <summary>
+        /// Also provides fitness scoring.
+        /// </summary>
+        public override bool IsFitnessScoringHeuristic => true;
         
         /// <summary>
         /// Initializes a new instance of the <see cref="WeakMutatorFilterHeuristic"/> class with default threshold.

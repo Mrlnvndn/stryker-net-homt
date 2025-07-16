@@ -9,6 +9,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
     /// <summary>
     /// A heuristic that favors FOMs with high mutual dependency (CDPA - Code Dependency Path Analysis).
     /// Research suggests that mutants with high coupling are more likely to form SSHOMs.
+    /// This is primarily a FITNESS SCORING heuristic.
     /// </summary>
     public class DependencyHeuristic : BaseHOMHeuristic
     {
@@ -27,6 +28,11 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// Dependency information is very valuable for SSHOM detection
         /// </summary>
         public override double Weight => 2.0;
+        
+        /// <summary>
+        /// This is purely a fitness scoring heuristic.
+        /// </summary>
+        public override bool IsFitnessScoringHeuristic => true;
         
         /// <summary>
         /// Performs additional initialization to calculate dependency relationships

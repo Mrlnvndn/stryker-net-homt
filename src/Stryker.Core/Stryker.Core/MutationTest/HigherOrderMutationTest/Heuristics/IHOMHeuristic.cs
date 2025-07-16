@@ -25,7 +25,17 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// <summary>
         /// Indicates whether this heuristic can guide the search process by suggesting candidates.
         /// </summary>
-        bool CanGuideSearch { get; }
+        bool IsSearchStrategyHeuristic { get; }
+        
+        /// <summary>
+        /// Indicates whether this heuristic is used for filtering candidates.
+        /// </summary>
+        bool IsFilteringHeuristic { get; }
+        
+        /// <summary>
+        /// Indicates whether this heuristic is used for fitness scoring of candidates.
+        /// </summary>
+        bool IsFitnessScoringHeuristic { get; }
 
         /// <summary>
         /// Initializes the heuristic with context data.
