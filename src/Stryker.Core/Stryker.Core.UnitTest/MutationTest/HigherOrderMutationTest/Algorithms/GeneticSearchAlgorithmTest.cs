@@ -24,7 +24,6 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
         private Mock<MutationTestInput> _inputMock;
         private List<IMutant> _testMutants;
         private List<IHOMHeuristic> _heuristics;
-        private Mock<ITimeoutHeuristicReporter> _reporterMock;
         private Mock<IMutantExecutor> _executorMock;
         private Mock<IHOMHeuristic> _heuristicMock;
         
@@ -34,7 +33,6 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
             // Set up mocks
             _optionsMock = new Mock<IStrykerOptions>();
             _inputMock = new Mock<MutationTestInput>();
-            _reporterMock = new Mock<ITimeoutHeuristicReporter>();
             _executorMock = new Mock<IMutantExecutor>();
             _heuristicMock = new Mock<IHOMHeuristic>();
             
@@ -55,7 +53,6 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
                 _inputMock.Object,
                 _heuristicMock.Object,
                 _optionsMock.Object,
-                _reporterMock.Object,
                 _testMutants,
                 _executorMock.Object);
         }

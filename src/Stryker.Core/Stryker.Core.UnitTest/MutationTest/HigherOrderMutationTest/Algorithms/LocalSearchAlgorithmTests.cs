@@ -28,7 +28,6 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
         // Dictionary to store file paths for mutations
         private Dictionary<int, string> _mutationFilePaths;
         private Mock<IHOMHeuristic> _heuristicMock;
-        private Mock<ITimeoutHeuristicReporter> _reporterMock;
         private Mock<IMutantExecutor> _executorMock;
         
         [TestInitialize]
@@ -39,7 +38,6 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
             _heuristics = new List<IHOMHeuristic>();
             _mutationFilePaths = new Dictionary<int, string>();
             _heuristicMock = new Mock<IHOMHeuristic>();
-            _reporterMock = new Mock<ITimeoutHeuristicReporter>();
             _executorMock = new Mock<IMutantExecutor>();
             
             // Create test mutants
@@ -48,11 +46,9 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
             // Create the system under test with default parameters
             _sut = new LocalSearchAlgorithm(
                 _inputMock.Object, 
-                _heuristicMock.Object,
+                _heuristics,
                 _optionsMock.Object,
-                _reporterMock.Object,
                 _testMutants,
-                _executorMock.Object,
                 maxIterations: 3, 
                 candidatePoolSize: 10, 
                 maxOrder: 3);
@@ -161,11 +157,9 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
             // Arrange
             var localSearch = new LocalSearchAlgorithm(
                 _inputMock.Object, 
-                _heuristicMock.Object,
+                _heuristics,
                 _optionsMock.Object,
-                _reporterMock.Object,
                 _testMutants,
-                _executorMock.Object,
                 maxOrder: 2); // Maximum 2 mutants per HOM
             
             // Act
@@ -184,11 +178,9 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
             // Arrange
             var sut = new LocalSearchAlgorithm(
                 _inputMock.Object, 
-                _heuristicMock.Object,
+                _heuristics,
                 _optionsMock.Object,
-                _reporterMock.Object,
                 _testMutants,
-                _executorMock.Object,
                 maxIterations: 5); // More iterations to potentially create duplicates
             
             // Act

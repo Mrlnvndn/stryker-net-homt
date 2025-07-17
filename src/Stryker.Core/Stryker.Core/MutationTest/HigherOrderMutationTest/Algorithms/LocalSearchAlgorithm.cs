@@ -63,11 +63,9 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         /// <param name="maxOrder">Maximum order (number of FOMs) to consider.</param>
         public LocalSearchAlgorithm(
             MutationTestInput mutationTestInput,
-            IHOMHeuristic heuristic,
+            IList<IHOMHeuristic> heuristics,
             IStrykerOptions options,
-            ITimeoutHeuristicReporter reporter,
             IReadOnlyCollection<IMutant> availableMutants,
-            IMutantExecutor executor,
             int maxIterations = 10,
             int candidatePoolSize = 50, 
             int maxOrder = 4)
@@ -91,9 +89,12 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             _heuristicRegistry.RegisterHeuristic(new WeakMutatorFilterHeuristic());
             
             // For backward compatibility, register the provided legacy heuristic if it's not null
-            if (heuristic != null)
+            if (heuristics != null)
             {
-                _heuristicRegistry.RegisterHeuristic(heuristic);
+                foreach (var heuristic in heuristics)
+                {
+                    _heuristicRegistry.RegisterHeuristic(heuristic);
+                }
             }
         }
 

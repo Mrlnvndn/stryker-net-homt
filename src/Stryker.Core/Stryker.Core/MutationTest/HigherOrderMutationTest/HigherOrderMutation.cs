@@ -64,6 +64,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
         /// <returns>An enumerable of lists, where each inner list is a candidate HOM.</returns>
         public IEnumerable<List<IMutant>> CreateCandidateHOMs(string algorithmName = null)
         {
+
             if (!_allFirstOrderMutants.Any())
             {
                 _logger.LogInformation("No first-order mutants available to create HOM candidates.");
@@ -92,22 +93,10 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
                 _logger.LogInformation("Using HOM search algorithm: {AlgorithmName}", selectedAlgorithm.Name);
             }
 
-            // Typically, HOMs are built from FOMs that were not easily killed (survived or pending)
-            // Or based on specific heuristics that might select any FOM.
-            // For now, let's assume the search algorithm will handle which FOMs are eligible.
-            var eligibleFOMs = _allFirstOrderMutants.Where(fom => fom.ResultStatus == MutantStatus.Pending || fom.ResultStatus == MutantStatus.Survived).ToList();
-
-            if (!eligibleFOMs.Any())
-            {
-                _logger.LogInformation("No pending or survived first-order mutants available to form HOM candidates based on default eligibility.");
-                // Optionally, allow algorithm to use all FOMs if it has its own filtering
-                // eligibleFOMs = _allFirstOrderMutants.ToList(); 
-            }
-
             _logger.LogDebug("Generating HOM candidates using {AlgorithmName} with {FOMCount} eligible FOMs and {HeuristicCount} heuristics.",
-                selectedAlgorithm.Name, eligibleFOMs.Count, _heuristics.Count);
+                selectedAlgorithm.Name, _allFirstOrderMutants.Count, _heuristics.Count);
 
-            foreach (var candidate in selectedAlgorithm.GenerateCandidates(eligibleFOMs, _heuristics, _options, _input))
+            foreach (var candidate in selectedAlgorithm.GenerateCandidates(_allFirstOrderMutants, _heuristics, _options, _input))
             {
                 // HOMs are typically of order 2 or higher.
                 if (candidate != null && candidate.Count > 1)

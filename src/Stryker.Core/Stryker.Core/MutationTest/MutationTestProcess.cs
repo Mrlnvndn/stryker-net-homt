@@ -10,6 +10,9 @@ using Stryker.Abstractions.ProjectComponents;
 using Stryker.Abstractions.Reporting;
 using Stryker.Abstractions.Testing;
 using Stryker.Core.CoverageAnalysis;
+using Stryker.Core.MutationTest.HigherOrderMutationTest;
+using Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms;
+using Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics;
 using Stryker.TestRunner.Tests;
 using Stryker.Utilities.Buildalyzer;
 using Stryker.Utilities.Logging;
@@ -103,6 +106,8 @@ public class MutationTestProcess : IMutationTestProcess
 
     private void TestMutants(IEnumerable<IMutant> mutantsToTest)
     {
+        var higherOrderMutants = BuildHigherOrderMutants(mutantsToTest.ToList());
+
         var mutantGroups = BuildMutantGroupsForTest(mutantsToTest.ToList());
 
         var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = _options.Concurrency };
@@ -189,7 +194,30 @@ public class MutationTestProcess : IMutationTestProcess
         return true;
     }
 
-    //TODO insert HOMT here?
+    private IEnumerable<List<IMutant>> BuildHigherOrderMutants(IReadOnlyCollection<IMutant> mutantsToTest)
+    {
+        if (!_options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutations))
+        {
+            return new List<List<IMutant>> { mutantsToTest.ToList() };
+        }
+        var higherOrderMutation = new HigherOrderMutation(_options, Input, mutantsToTest);
+
+        var heuristics = new List<IHOMHeuristic>();
+
+        var searchAlgorithm = new LocalSearchAlgorithm(Input, heuristics, _options, mutantsToTest);
+
+        higherOrderMutation.AddSearchAlgorithm(searchAlgorithm);
+
+        var higherOrderMutants = higherOrderMutation.CreateCandidateHOMs().ToList();
+
+        if (higherOrderMutants.Count == 0)
+        {
+            return new List<List<IMutant>> { mutantsToTest.ToList() };
+        }
+        return higherOrderMutants.Select(x => x.ToList());
+    }
+
+
     private IEnumerable<List<IMutant>> BuildMutantGroupsForTest(IReadOnlyCollection<IMutant> mutantsNotRun)
     {
         if (_options.OptimizationMode.HasFlag(OptimizationModes.DisableMixMutants) ||

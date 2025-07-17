@@ -38,7 +38,6 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             MutationTestInput mutationTestInput,
             IHOMHeuristic heuristic,
             IStrykerOptions options,
-            ITimeoutHeuristicReporter reporter,
             IReadOnlyCollection<IMutant> availableMutants,
             IMutantExecutor executor)
         {
