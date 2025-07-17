@@ -20,25 +20,12 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// </summary>
         private readonly int _maxHomSize;
         
-        /// <summary>
-        /// Gets the name of this heuristic.
-        /// </summary>
         public override string Name => "SSHOMExpander";
-        
-        /// <summary>
-        /// This heuristic can actively guide the search process
-        /// </summary>
+
         public override bool IsSearchStrategyHeuristic => true;
-        
-        /// <summary>
-        /// Gets the weight of this heuristic when used in scoring.
-        /// This is both a search strategy and a scoring heuristic.
-        /// </summary>
+
         public override double Weight => 2.0;
-        
-        /// <summary>
-        /// This heuristic provides fitness scoring.
-        /// </summary>
+
         public override bool IsFitnessScoringHeuristic => true;
         
         /// <summary>
@@ -50,11 +37,6 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             _maxHomSize = maxHomSize;
         }
         
-        /// <summary>
-        /// Scores a candidate HOM based on how it relates to potential SSHOMs.
-        /// </summary>
-        /// <param name="candidate">The candidate HOM to evaluate.</param>
-        /// <returns>A score between 0.0 and 1.0, with higher values for candidates that are expansions of potential SSHOMs.</returns>
         public override double ScoreCandidate(List<IMutant> candidate)
         {
             if (candidate == null || candidate.Count < 2)
@@ -85,13 +67,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             
             return NormalizeScore(bestSimilarity);
         }
-        
-        /// <summary>
-        /// Suggests next candidates to explore by expanding potential SSHOMs.
-        /// </summary>
-        /// <param name="currentCandidate">The current candidate HOM.</param>
-        /// <param name="availableFOMs">Available first-order mutants to consider.</param>
-        /// <returns>A list of suggested candidate HOMs to explore next.</returns>
+
         public override List<List<IMutant>> SuggestNextCandidates(List<IMutant> currentCandidate, IReadOnlyCollection<IMutant> availableFOMs)
         {
             var suggestedCandidates = new List<List<IMutant>>();
@@ -141,7 +117,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// </summary>
         /// <param name="candidate">The candidate to evaluate.</param>
         /// <returns>True if the candidate is a potential SSHOM, false otherwise.</returns>
-        private bool IsPotentialSSHOM(List<IMutant> candidate)
+        private static bool IsPotentialSSHOM(List<IMutant> candidate)
         {
             if (candidate == null || candidate.Count < 2)
             {
@@ -182,7 +158,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// <param name="candidate1">The first candidate.</param>
         /// <param name="candidate2">The second candidate.</param>
         /// <returns>A similarity score between 0.0 and 1.0, where 1.0 means identical.</returns>
-        private double CalculateSimilarity(List<IMutant> candidate1, List<IMutant> candidate2)
+        private static double CalculateSimilarity(List<IMutant> candidate1, List<IMutant> candidate2)
         {
             if (candidate1 == null || candidate2 == null || candidate1.Count == 0 || candidate2.Count == 0)
             {

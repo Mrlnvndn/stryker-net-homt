@@ -23,33 +23,15 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         {
             _maxSize = maxSize;
         }
-        
-        /// <summary>
-        /// Gets the name of this heuristic.
-        /// </summary>
+
         public override string Name => "MaxSizeLimit";
         
-        /// <summary>
-        /// Maximum size isn't primarily a scoring heuristic but a filter, so its weight in scoring is low.
-        /// </summary>
         public override double Weight => 0.5;
-        
-        /// <summary>
-        /// This is primarily a filtering heuristic.
-        /// </summary>
+
         public override bool IsFilteringHeuristic => true;
         
-        /// <summary>
-        /// Also provides some fitness scoring with low weight.
-        /// </summary>
         public override bool IsFitnessScoringHeuristic => true;
         
-        /// <summary>
-        /// Scores a candidate HOM based on its size relative to the maximum size.
-        /// Smaller HOMs receive higher scores.
-        /// </summary>
-        /// <param name="candidate">The candidate HOM to evaluate.</param>
-        /// <returns>A score between 0.0 and 1.0, with 1.0 for size 2 and decreasing scores for larger sizes.</returns>
         public override double ScoreCandidate(List<IMutant> candidate)
         {
             if (candidate == null || candidate.Count < 2)
@@ -67,11 +49,6 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             return 0.0; // Over max size
         }
         
-        /// <summary>
-        /// Filters out candidates that exceed the maximum size.
-        /// </summary>
-        /// <param name="candidate">The candidate HOM to evaluate.</param>
-        /// <returns>True if the candidate exceeds the maximum size, false otherwise.</returns>
         public override bool ShouldFilterCandidate(List<IMutant> candidate)
         {
             return candidate == null || candidate.Count < 2 || candidate.Count > _maxSize;

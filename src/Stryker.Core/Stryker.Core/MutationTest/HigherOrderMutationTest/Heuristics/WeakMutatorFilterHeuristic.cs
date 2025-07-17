@@ -26,20 +26,11 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// Threshold below which a mutant should be filtered out
         /// </summary>
         private readonly double _filterThreshold;
-        
-        /// <summary>
-        /// Gets the name of this heuristic.
-        /// </summary>
+
         public override string Name => "WeakMutatorFilter";
-        
-        /// <summary>
-        /// This is primarily a filtering heuristic.
-        /// </summary>
+
         public override bool IsFilteringHeuristic => true;
-        
-        /// <summary>
-        /// Also provides fitness scoring.
-        /// </summary>
+
         public override bool IsFitnessScoringHeuristic => true;
         
         /// <summary>
@@ -50,11 +41,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         {
             _filterThreshold = NormalizeScore(filterThreshold);
         }
-        
-        /// <summary>
-        /// Performs additional initialization to calculate strength scores for each mutation type
-        /// based on how many tests typically kill mutants of that type.
-        /// </summary>
+
         protected override void OnInitialized()
         {
             _mutatorStrengthScores.Clear();
@@ -151,11 +138,6 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             }
         }
         
-        /// <summary>
-        /// Scores a candidate HOM based on the strength of its mutators.
-        /// </summary>
-        /// <param name="candidate">The candidate HOM to evaluate.</param>
-        /// <returns>A score between 0.0 and 1.0, with higher values for candidates with stronger mutators.</returns>
         public override double ScoreCandidate(List<IMutant> candidate)
         {
             if (candidate == null || candidate.Count == 0)
@@ -183,11 +165,6 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             return NormalizeScore(totalScore / scoredMutants);
         }
         
-        /// <summary>
-        /// Filters out candidates containing weak mutators.
-        /// </summary>
-        /// <param name="candidate">The candidate HOM to evaluate.</param>
-        /// <returns>True if the candidate contains a weak mutant, false otherwise.</returns>
         public override bool ShouldFilterCandidate(List<IMutant> candidate)
         {
             if (candidate == null || candidate.Count == 0)
@@ -212,7 +189,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// </summary>
         /// <param name="mutant">The mutant to get the type for.</param>
         /// <returns>The mutation type as a string.</returns>
-        private string GetMutationType(IMutant mutant)
+        private static string GetMutationType(IMutant mutant)
         {
             // Enums are value types so can't use null conditional operator directly on Type
             if (mutant?.Mutation == null)
@@ -227,22 +204,14 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// </summary>
         /// <param name="mutant">The mutant to check.</param>
         /// <returns>The number of killing tests.</returns>
-        private int CountKillingTests(IMutant mutant)
+        private static int CountKillingTests(IMutant mutant)
         {
             if (mutant.KillingTests == null || mutant.KillingTests.IsEmpty)
             {
-                return 0; // No tests kill this mutant (potentially equivalent mutant)
+                return 0; // No tests kill this mutant 
             }
-            
-            // Here, in a real implementation, we'd have access to the
-            // actual count of tests in the KillingTests collection.
-            // For now, we'll use a simplified approach.
-            
-            // This is a simplified approximation - to be replaced with actual implementation
-            // that counts the tests in the ITestIdentifiers collection
-            int estimatedTestCount = 1;
-            
-            return System.Math.Max(estimatedTestCount, 1); // Ensure at least 1 test
+
+            return mutant.KillingTests.Count;
         }
     }
 }

@@ -21,34 +21,19 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// </summary>
         private readonly Dictionary<int, double> _mutantScores = new();
         
-        /// <summary>
-        /// Gets the name of this heuristic.
-        /// </summary>
         public override string Name => "MutatorType";
         
-        /// <summary>
-        /// Medium weight for mutation type preference
-        /// </summary>
         public override double Weight => 1.5;
         
-        /// <summary>
-        /// This is purely a fitness scoring heuristic.
-        /// </summary>
         public override bool IsFitnessScoringHeuristic => true;
         
         /// <summary>
         /// Initializes a new instance of the <see cref="MutatorTypeHeuristic"/> class with default
         /// preferred mutation types based on research.
         /// </summary>
-        public MutatorTypeHeuristic() : this(new[]
+        public MutatorTypeHeuristic() : this([])
         {
-            // These are examples - in a real implementation, these would match actual mutation types used in Stryker
-            "RelationalOperator", 
-            "ConditionalExpression",
-            "BlockStatement",
-            "Statement"
-        })
-        {
+            // TODO: fill _defaultPreferredMutationTypes with mutation types that are known to be more likely to form SSHOMs 
         }
 
         /// <summary>
@@ -61,9 +46,6 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             _preferredMutationTypes = new HashSet<string>(preferredMutationTypes);
         }
         
-        /// <summary>
-        /// Performs additional initialization to calculate scores for each FOM based on its mutation type.
-        /// </summary>
         protected override void OnInitialized()
         {
             _mutantScores.Clear();
@@ -78,11 +60,6 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             }
         }
         
-        /// <summary>
-        /// Scores a candidate HOM based on how many of its FOMs have preferred mutation types.
-        /// </summary>
-        /// <param name="candidate">The candidate HOM to evaluate.</param>
-        /// <returns>A score between 0.0 and 1.0, with higher values for candidates with preferred mutation types.</returns>
         public override double ScoreCandidate(List<IMutant> candidate)
         {
             if (candidate == null || candidate.Count == 0)

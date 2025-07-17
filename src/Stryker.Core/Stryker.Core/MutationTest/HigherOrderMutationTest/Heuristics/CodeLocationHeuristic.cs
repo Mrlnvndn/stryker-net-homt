@@ -17,29 +17,14 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         private readonly Dictionary<IMutant, string> _classMap = new();
         private readonly Dictionary<IMutant, string> _methodMap = new();
 
-        /// <summary>
-        /// Gets the name of this heuristic.
-        /// </summary>
         public override string Name => "CodeLocation";
 
-        /// <summary>
-        /// Gets the weight of this heuristic in overall scoring.
-        /// </summary>
-        public override double Weight => 1.5; // Higher weight as location is important
+        public override double Weight => 1.5;
 
-        /// <summary>
-        /// This heuristic is for scoring, not for search guidance.
-        /// </summary>
         public override bool IsSearchStrategyHeuristic => false;
-        
-        /// <summary>
-        /// This is purely a fitness scoring heuristic.
-        /// </summary>
+
         public override bool IsFitnessScoringHeuristic => true;
 
-        /// <summary>
-        /// Called after the heuristic is initialized. Override to perform additional initialization.
-        /// </summary>
         protected override void OnInitialized()
         {
             foreach (var fom in AvailableFOMs)
@@ -78,11 +63,6 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             }
         }
 
-        /// <summary>
-        /// Scores a candidate based on location proximity of its constituent FOMs.
-        /// </summary>
-        /// <param name="candidate">The candidate to score.</param>
-        /// <returns>A score between 0.0 and 1.0.</returns>
         public override double ScoreCandidate(List<IMutant> candidate)
         {
             if (candidate == null || candidate.Count <= 1)

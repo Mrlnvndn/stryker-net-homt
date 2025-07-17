@@ -19,24 +19,12 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// </summary>
         private readonly Dictionary<int, HashSet<int>> _dependencyGraph = new();
         
-        /// <summary>
-        /// Gets the name of this heuristic.
-        /// </summary>
         public override string Name => "Dependency";
         
-        /// <summary>
-        /// Dependency information is very valuable for SSHOM detection
-        /// </summary>
         public override double Weight => 2.0;
         
-        /// <summary>
-        /// This is purely a fitness scoring heuristic.
-        /// </summary>
         public override bool IsFitnessScoringHeuristic => true;
         
-        /// <summary>
-        /// Performs additional initialization to calculate dependency relationships
-        /// </summary>
         protected override void OnInitialized()
         {
             _dependencyGraph.Clear();
@@ -100,11 +88,6 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             }
         }
         
-        /// <summary>
-        /// Scores a candidate HOM based on the dependency relationships between its FOMs.
-        /// </summary>
-        /// <param name="candidate">The candidate HOM to evaluate.</param>
-        /// <returns>A score between 0.0 and 1.0, with higher values for candidates with more dependent FOMs.</returns>
         public override double ScoreCandidate(List<IMutant> candidate)
         {
             if (candidate == null || candidate.Count < 2)

@@ -23,24 +23,12 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         private int _minTests = int.MaxValue;
         private int _maxTests = int.MinValue;
         
-        /// <summary>
-        /// Gets the name of this heuristic.
-        /// </summary>
         public override string Name => "HardToKill";
         
-        /// <summary>
-        /// Hard-to-kill FOMs are very important for finding SSHOMs.
-        /// </summary>
         public override double Weight => 2.5;
         
-        /// <summary>
-        /// This is purely a fitness scoring heuristic.
-        /// </summary>
         public override bool IsFitnessScoringHeuristic => true;
         
-        /// <summary>
-        /// Performs additional initialization to calculate killing test counts for each FOM
-        /// </summary>
         protected override void OnInitialized()
         {
             // Reset statistics
@@ -83,11 +71,6 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             }
         }
         
-        /// <summary>
-        /// Scores a candidate HOM based on how hard its FOMs are to kill.
-        /// </summary>
-        /// <param name="candidate">The candidate HOM to evaluate.</param>
-        /// <returns>A score between 0.0 and 1.0, with higher values for candidates with harder-to-kill FOMs.</returns>
         public override double ScoreCandidate(List<IMutant> candidate)
         {
             if (candidate == null || candidate.Count == 0)
