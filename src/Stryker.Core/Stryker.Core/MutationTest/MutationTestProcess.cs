@@ -104,15 +104,23 @@ public class MutationTestProcess : IMutationTestProcess
 
     public void Restore() => Input.TestProjectsInfo.RestoreOriginalAssembly(Input.SourceProjectInfo.AnalyzerResult);
 
+    //TODO: add creation of homt to this function
     private void TestMutants(IEnumerable<IMutant> mutantsToTest)
     {
-        var higherOrderMutants = BuildHigherOrderMutants(mutantsToTest.ToList());
+        IEnumerable<List<IMutant>> testBatches;
 
-        var mutantGroups = BuildMutantGroupsForTest(mutantsToTest.ToList());
+        if (_options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutations))
+        {
+            testBatches = BuildHigherOrderMutants(mutantsToTest.ToList());
+        }
+        else
+        {
+            testBatches = BuildMutantGroupsForTest(mutantsToTest.ToList());
+        }            
 
         var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = _options.Concurrency };
 
-        Parallel.ForEach(mutantGroups, parallelOptions, mutants =>
+        Parallel.ForEach(testBatches, parallelOptions, mutants =>
         {
             var reportedMutants = new HashSet<IMutant>();
 
@@ -209,6 +217,16 @@ public class MutationTestProcess : IMutationTestProcess
         higherOrderMutation.AddSearchAlgorithm(searchAlgorithm);
 
         var higherOrderMutants = higherOrderMutation.CreateCandidateHOMs().ToList();
+
+        // make sure that all mutants which do not occur in higher order mutants are still tested
+        var mutantsMissingFromHoms = mutantsToTest.Where(m => !higherOrderMutants.Any(h => h.Contains(m))).ToList();
+        if (mutantsMissingFromHoms.Count > 0)
+        {
+            Logger.LogDebug("Some mutants were not included in higher order mutants: {MutantsNotRun}",
+                mutantsMissingFromHoms.Select(m => m.Id));
+            // if there are mutants not run, we add them as a group
+            higherOrderMutants.Add(mutantsMissingFromHoms);
+        }
 
         if (higherOrderMutants.Count == 0)
         {

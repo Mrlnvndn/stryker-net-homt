@@ -285,7 +285,7 @@ public sealed class VsTestContextInformation : IDisposable
 </RunSettings>";
 
     public string GenerateRunSettings(int? timeout, bool forCoverage, Dictionary<int, ITestIdentifiers> mutantTestsMap,
-        string helperNameSpace, string frameworkVersion = null, string platform = null)
+        string helperNameSpace, string frameworkVersion = null, string platform = null, bool isHomt = false)
     {
         var settingsForCoverage = string.Empty;
         var needDataCollector = forCoverage || mutantTestsMap is not null;
@@ -293,7 +293,8 @@ public sealed class VsTestContextInformation : IDisposable
             ? CoverageCollector.GetVsTestSettings(
                 forCoverage,
                 mutantTestsMap?.Select(e => (e.Key, e.Value.GetIdentifiers().Select(x => Guid.Parse(x)))),
-                helperNameSpace)
+                helperNameSpace,
+                isHomt) 
             : string.Empty;
         if (_testFramework.HasFlag(TestFrameworks.NUnit))
         {

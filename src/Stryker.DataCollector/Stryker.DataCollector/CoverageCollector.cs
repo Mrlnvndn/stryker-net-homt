@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
@@ -28,14 +29,21 @@ namespace Stryker.DataCollector
     {
         private IDataCollectionSink _dataSink;
         private bool _coverageOn;
+        private bool _isHomt;
         private int _activeMutation = -1;
+        private HashSet<int> _activeMutations = new HashSet<int>() { -1};
 
         private Action<string> _logger;
+        //Key is the test id, value is a set of mutant ids that were executed by this test
         private readonly IDictionary<string, int> _mutantTestedBy = new Dictionary<string, int>();
+
+        private readonly IDictionary<string, HashSet<int>> _mutantTestedByHomt = new Dictionary<string, HashSet<int>>();
 
         private string _controlClassName;
         private Type _mutantControlType;
+        private FieldInfo _isHomtField;
         private FieldInfo _activeMutantField;
+        private FieldInfo _activeMutantsField;
 
         private MethodInfo _getCoverageData;
         private IList<int> _mutationCoveredOutsideTests;
@@ -55,7 +63,7 @@ namespace Stryker.DataCollector
 
         public static string GetVsTestSettings(bool needCoverage,
             IEnumerable<(int mutant, IEnumerable<Guid> coveringTests)> mutantTestsMap,
-            string helperNameSpace)
+            string helperNameSpace, bool isHomt = false)
         {
             var codeBase = typeof(CoverageCollector).GetTypeInfo().Assembly.Location;
             var qualifiedName = typeof(CoverageCollector).AssemblyQualifiedName;
@@ -73,6 +81,10 @@ namespace Stryker.DataCollector
             if (needCoverage)
             {
                 configuration.Append("<Coverage/>");
+            }
+            if (isHomt)
+            {
+                configuration.Append("<Homt/>");
             }
             if (mutantTestsMap != null)
             {
@@ -157,11 +169,18 @@ namespace Stryker.DataCollector
                 return;
             }
             _activeMutantField = _mutantControlType.GetField("ActiveMutant");
+            _activeMutantsField = _mutantControlType.GetField("ActiveMutants");
+            _isHomtField = _mutantControlType.GetField("isHomt");
             var coverageControlField = _mutantControlType.GetField("CaptureCoverage");
             _getCoverageData = _mutantControlType.GetMethod("GetCoverageData");
             if (_coverageOn)
             {
                 coverageControlField.SetValue(null, true);
+            }
+
+            if (_isHomt && _isHomtField != null)
+            {
+                _isHomtField.SetValue(null, true);
             }
 
             _activeMutantField.SetValue(null, _activeMutation);
@@ -170,22 +189,36 @@ namespace Stryker.DataCollector
         private void SetActiveMutation(string id)
         {
             _activeMutation = GetActiveMutantForThisTest(id);
-            if (_activeMutantField != null)
-            {
-                _activeMutantField.SetValue(null, _activeMutation);
-            }
+            _activeMutantField?.SetValue(null, _activeMutation);
         }
 
-        //add IsHOMT flag to the configuration and read it here
+        private void SetActiveMutations(string id)
+        {
+            _activeMutations = GetActiveMutantsForThisTest(id);
+            _activeMutantsField?.SetValue(null, _activeMutations);
+        }
+
         private void ReadConfiguration(string configuration)
         {
             var node = new XmlDocument();
             node.LoadXml(configuration);
 
             var testMapping = node.SelectNodes("//Parameters/Mutant");
+            var homtNode = node.SelectSingleNode("//Parameters/Homt");
+            if (homtNode != null)
+            {
+                _isHomt = true;
+            }
             if (testMapping != null)
             {
-                ParseTestMapping(testMapping);
+                if (_isHomt)
+                {
+                    ParseTestMappingHomt(testMapping);
+                }
+                else
+                {
+                    ParseTestMapping(testMapping);
+                }
             }
 
             var nameSpaceNode = node.SelectSingleNode("//Parameters/MutantControl");
@@ -199,17 +232,29 @@ namespace Stryker.DataCollector
                 _coverageOn = true;
             }
 
+            
+
             SetActiveMutation(AnyId);
         }
 
         private int GetActiveMutantForThisTest(string testId)
         {
-            if (_mutantTestedBy.TryGetValue(testId, out var test))
+            if (_mutantTestedBy.TryGetValue(testId, out var mutantId))
             {
-                return test;
+                return mutantId;
             }
 
             return _mutantTestedBy.TryGetValue(AnyId, out var value) ? value : -1;
+        }
+
+        private HashSet<int> GetActiveMutantsForThisTest(string testId)
+        {
+            if (_mutantTestedByHomt.TryGetValue(testId, out var mutantIds))
+            {
+                return mutantIds;
+            }
+
+            return _mutantTestedByHomt.TryGetValue(AnyId, out var value) ? value : new HashSet<int>() { -1};
         }
 
         private void ParseTestMapping(XmlNodeList testMapping)
@@ -241,6 +286,46 @@ namespace Stryker.DataCollector
             }
         }
 
+        private void ParseTestMappingHomt(XmlNodeList testMapping)
+        {
+            var mutations = new HashSet<int>();
+            for (var i = 0; i < testMapping.Count; i++)
+            {
+                var current = testMapping[i];
+                var mutantId = int.Parse(current.Attributes["id"].Value);
+                var tests = current.Attributes["tests"].Value;
+                mutations.Add(mutantId);
+
+                if (string.IsNullOrWhiteSpace(tests))
+                {
+                    Add(AnyId, mutantId);
+                    continue;
+                }
+
+                foreach (var test in tests.Split(','))
+                {
+                    Add(test, mutantId);
+                }
+            }
+
+            if (mutations.Count == 1)
+            {
+                // overwrite with the single mutant
+                _mutantTestedByHomt[AnyId] = new HashSet<int>(mutations);
+            }
+
+            void Add(string testId, int mutantId)
+            {
+                if (!_mutantTestedByHomt.TryGetValue(testId, out var set))
+                {
+                    _mutantTestedByHomt[testId] = set = new HashSet<int>();
+                }
+
+                set.Add(mutantId);
+            }
+        }
+
+
         public void TestCaseStart(TestCaseStartArgs testCaseStartArgs)
         {
             if (_coverageOn)
@@ -254,9 +339,18 @@ namespace Stryker.DataCollector
 
             // we need to set the proper mutant
             var testCase = testCaseStartArgs.TestCase;
-            SetActiveMutation(testCase.Id.ToString());
 
-            Log($"Test {testCase.FullyQualifiedName} starts against mutant {_activeMutation} (var).");
+            if (_isHomt)
+            {
+                SetActiveMutations(testCase.Id.ToString());
+                Log($"Test {testCase.FullyQualifiedName} starts against mutants {string.Join(",", _activeMutations)} (var).");
+            }
+            else
+            {
+
+                SetActiveMutation(testCase.Id.ToString());
+                Log($"Test {testCase.FullyQualifiedName} starts against mutant {_activeMutation} (var).");
+            }
         }
 
         public void TestCaseEnd(TestCaseEndArgs testCaseEndArgs)

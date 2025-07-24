@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Stryker
 {
 
@@ -12,6 +14,8 @@ namespace Stryker
         public static bool CaptureCoverage;
         public static int ActiveMutant = -2;
         public const int ActiveMutantNotInitValue = -2;
+        public static HashSet<int> ActiveMutants = new HashSet<int>();
+        public static bool isHomt = false;
 
         public static void InitCoverage()
         {
@@ -37,14 +41,19 @@ namespace Stryker
             System.GC.KeepAlive(_coveredStaticMutants);
         }
 
-        // check with: Stryker.MutantControl.IsActive(ID)
+        // Stryker.MutantControl.IsActive(id) is called in generated mutated code that Stryker injects into the target application
         // TODO: allow isActive to return true for mutliple ids during HOMT
+        // check with: Stryker.MutantControl.IsActive(ID)
         public static bool IsActive(int id)
         {
             if (CaptureCoverage)
             {
                 RegisterCoverage(id);
                 return false;
+            }
+            if (isHomt)
+            {
+                return ActiveMutants.Contains(id);
             }
             if (ActiveMutant == ActiveMutantNotInitValue)
             {
