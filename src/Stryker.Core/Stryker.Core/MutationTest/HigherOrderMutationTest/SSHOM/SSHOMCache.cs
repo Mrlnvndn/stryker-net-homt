@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Stryker.Core.MutationTest
+namespace Stryker.Core.MutationTest.HigherOrderMutationTest.SSHOM
 {
     public class SSHOMCache
     {

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using Stryker.Abstractions;
 using Stryker.Abstractions.Options;
+using Stryker.Core.Mutants;
 using Stryker.Core.MutationTest;
 using Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics;
 
@@ -63,8 +64,8 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         /// <param name="heuristics">A list of heuristics that guide the search.</param>
         /// <param name="options">Stryker options.</param>
         /// <param name="input">Mutation test input for additional context.</param>
-        /// <returns>An enumerable of lists, where each inner list represents a candidate HOM that might be a SSHOM.</returns>
-        public IEnumerable<List<IMutant>> GenerateCandidates(
+        /// <returns>An enumerable of HigherOrderMutant instances representing candidate HOMs.</returns>
+        public IEnumerable<HigherOrderMutant> GenerateCandidates(
             IReadOnlyCollection<IMutant> availableFOMs,
             IReadOnlyList<IHOMHeuristic> heuristics,
             IStrykerOptions options,
@@ -80,7 +81,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             var (FomList, InitialPopulation, AllCandidateKeys, YieldedCandidateKeys) = InitializeGeneticAlgorithm(availableFOMs);
             
             // Run the evolutionary algorithm and yield results
-            foreach (var candidate in EvolvePopulationAcrossGenerations(
+            foreach (var candidateList in EvolvePopulationAcrossGenerations(
                 FomList,
                 InitialPopulation,
                 AllCandidateKeys,
@@ -89,7 +90,10 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                 options,
                 input))
             {
-                yield return candidate;
+                // Create HigherOrderMutant instance from the candidate list
+                var higherOrderMutant = new HigherOrderMutant(candidateList, Name);
+                
+                yield return higherOrderMutant;
             }
         }
 

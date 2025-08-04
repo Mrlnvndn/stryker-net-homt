@@ -2,7 +2,13 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using Buildalyzer;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Moq;
+using Stryker.Abstractions;
+using Stryker.Abstractions.Testing;
+using Stryker.Core.Mutants;
+using Stryker.TestRunner.Tests;
 
 namespace Stryker.Core.UnitTest;
 
@@ -74,5 +80,31 @@ public static class TestHelper
         analyzerResultMock.Setup(x => x.ReferenceAliases).Returns(aliases);
 
         return analyzerResultMock;
+    }
+
+    public static IMutant CreateMutant(string fileName, int id, MutantStatus status, string[] killingTests = null)
+    {
+        killingTests ??= new[] { "Test1" };
+        
+        var mutant = new Mutant
+        {
+            Id = id,
+            ResultStatus = status,
+            Mutation = new Mutation
+            {
+                DisplayName = $"Test mutation {id}",
+                Type = Mutator.Arithmetic,
+                Description = "Replace + with -",
+                OriginalNode = SyntaxFactory.ParseSyntaxTree(
+                    text: "public int Add(int a, int b) { return a + b; }",
+                    path: fileName).GetRoot(),
+                ReplacementNode = SyntaxFactory.ParseSyntaxTree(
+                    text: "public int Add(int a, int b) { return a - b; }").GetRoot()
+            },
+            CoveringTests = new TestIdentifierList(killingTests),
+            KillingTests = new TestIdentifierList(killingTests),
+            AssessingTests = new TestIdentifierList(killingTests)
+        };
+        return mutant;
     }
 }

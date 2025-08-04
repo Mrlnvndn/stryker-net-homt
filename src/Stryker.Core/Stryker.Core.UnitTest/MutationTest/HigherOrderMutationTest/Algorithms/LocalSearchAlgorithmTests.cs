@@ -148,7 +148,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
             
             // Assert
             candidates.ShouldNotBeEmpty("Local search should generate candidates");
-            candidates.All(c => c.Count >= 2).ShouldBeTrue("All candidates should have at least 2 mutants");
+            candidates.All(c => c.Order >= 2).ShouldBeTrue("All candidates should have at least 2 mutants");
         }
         
         [TestMethod]
@@ -169,7 +169,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
             // Assert
             _heuristics.ShouldBeEmpty("No heuristics should be used in this test");
             candidates.ShouldNotBeEmpty();
-            candidates.All(c => c.Count <= 2).ShouldBeTrue("No candidate should exceed max order");
+            candidates.All(c => c.Order <= 2).ShouldBeTrue("No candidate should exceed max order");
         }
         
         [TestMethod]
@@ -192,7 +192,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
             
             foreach (var candidate in candidates)
             {
-                string signature = string.Join(",", candidate.OrderBy(m => m.Id).Select(m => m.Id));
+                string signature = string.Join(",", candidate.ConstituentMutants.OrderBy(m => m.Id).Select(m => m.Id));
                 if (!candidateSignatures.Add(signature))
                 {
                     hasDuplicates = true;

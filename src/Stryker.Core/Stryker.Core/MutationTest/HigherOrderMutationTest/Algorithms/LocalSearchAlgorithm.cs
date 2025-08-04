@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Stryker.Abstractions;
 using Stryker.Abstractions.Options;
+using Stryker.Core.Mutants;
 using Stryker.Core.MutationTest;
 using Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics;
 
@@ -87,6 +88,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             _heuristicRegistry.RegisterHeuristic(new HardToKillHeuristic());
             _heuristicRegistry.RegisterHeuristic(new MutatorTypeHeuristic());
             _heuristicRegistry.RegisterHeuristic(new WeakMutatorFilterHeuristic());
+            _heuristicRegistry.RegisterHeuristic(new SyntaxNodeConflictHeuristic());
             
             // For backward compatibility, register the provided legacy heuristic if it's not null
             if (heuristics != null)
@@ -105,8 +107,8 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         /// <param name="heuristics">A list of heuristics that guide the search.</param>
         /// <param name="options">Stryker options.</param>
         /// <param name="input">Mutation test input for additional context.</param>
-        /// <returns>An enumerable of lists, where each inner list represents a candidate HOM.</returns>
-        public IEnumerable<List<IMutant>> GenerateCandidates(
+        /// <returns>An enumerable of HigherOrderMutant instances representing candidate HOMs.</returns>
+        public IEnumerable<HigherOrderMutant> GenerateCandidates(
             IReadOnlyCollection<IMutant> availableFOMs,
             IReadOnlyList<IHOMHeuristic> heuristics,
             IStrykerOptions options,
@@ -155,7 +157,9 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                         // Only yield if the candidate is not filtered by heuristics
                         if (!_heuristicRegistry.ShouldFilterCandidate(candidate))
                         {
-                            yield return candidate;
+                            // Create HigherOrderMutant instance from the candidate list
+                            var higherOrderMutant = new HigherOrderMutant(candidate, Name);
+                            yield return higherOrderMutant;
                         }
                         
                         candidatePool.Add(candidate);

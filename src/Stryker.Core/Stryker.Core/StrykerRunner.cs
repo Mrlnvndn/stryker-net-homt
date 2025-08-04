@@ -11,6 +11,9 @@ using Stryker.Abstractions.Options;
 using Stryker.Abstractions.ProjectComponents;
 using Stryker.Core.Initialisation;
 using Stryker.Core.MutationTest;
+using Stryker.Core.MutationTest.HigherOrderMutationTest;
+using Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms;
+using Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics;
 using Stryker.Core.ProjectComponents;
 using Stryker.Core.ProjectComponents.TestProjects;
 using Stryker.Core.Reporters;
@@ -130,6 +133,24 @@ public class StrykerRunner : IStrykerRunner
             }
 
             reporters.OnAllMutantsTested(rootComponent, combinedTestProjectsInfo);
+
+            // Run SSHOM analysis if Higher-Order Mutations are enabled here temprarily, integrate with ONAllMutantsTested in the future
+            if (options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutations))
+            {
+                foreach (var project in _mutationTestProcesses)
+                {
+                    if (project.Input.HigherOrderMutation != null)
+                    {
+                        var analysisResult = project.Input.HigherOrderMutation.AnalyzeHOMsForSSHOMs();
+                        var summary = project.Input.HigherOrderMutation.GetSSHOMSummary();
+
+                        _logger.LogInformation("Project {ProjectName}: Found {SSHOMCount} SSHOMs with {ValidationRate:P1} validation rate",
+                            project.Input.SourceProjectInfo.ProjectContents.FullPath,
+                            summary.TotalSSHOMs,
+                            summary.SSHOMValidationRate);
+                    }
+                }
+            }
 
 
             return new StrykerRunResult(options, rootComponent.GetMutationScore());

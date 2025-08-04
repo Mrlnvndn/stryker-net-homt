@@ -181,6 +181,7 @@ namespace Stryker.DataCollector
             if (_isHomt && _isHomtField != null)
             {
                 _isHomtField.SetValue(null, true);
+                _activeMutantsField?.SetValue(null, _activeMutations);
             }
 
             _activeMutantField.SetValue(null, _activeMutation);

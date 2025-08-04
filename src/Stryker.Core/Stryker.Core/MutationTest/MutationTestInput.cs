@@ -1,6 +1,7 @@
 using Stryker.Abstractions.ProjectComponents;
 using Stryker.Abstractions.Testing;
 using Stryker.Core.Initialisation;
+using Stryker.Core.MutationTest.HigherOrderMutationTest;
 using Stryker.Core.ProjectComponents.SourceProjects;
 using Stryker.Core.ProjectComponents.TestProjects;
 
@@ -30,4 +31,9 @@ public class MutationTestInput
     /// Get/Set the initial test
     /// </summary>
     public InitialTestRun InitialTestRun { get; set; }
+
+    /// <summary>
+    /// Higher-Order Mutation context for managing HOMs and SSHOM analysis
+    /// </summary>
+    public HigherOrderMutation HigherOrderMutation { get; set; }
 }

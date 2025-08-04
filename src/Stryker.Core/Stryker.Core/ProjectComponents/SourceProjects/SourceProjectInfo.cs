@@ -14,7 +14,8 @@ public class SourceProjectInfo : IProjectAndTests
 
     public Action OnProjectBuilt { get; set; }
 
-    public IAnalyzerResult AnalyzerResult { get; set; }
+    // Virtual for mocking purposes
+    public virtual IAnalyzerResult AnalyzerResult { get; set; }
 
     /// <summary>
     /// The Folder/File structure found in the project under test.

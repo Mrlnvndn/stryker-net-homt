@@ -18,7 +18,7 @@ public interface IMutationTestExecutor
     ITestRunner TestRunner { get; }
 
     void Test(IProjectAndTests project, IList<IMutant> mutantsToTest, ITimeoutValueCalculator timeoutMs,
-        TestUpdateHandler updateHandler);
+        TestUpdateHandler updateHandler, bool forceSingle = false);
 }
 
 public class MutationTestExecutor : IMutationTestExecutor
@@ -33,9 +33,8 @@ public class MutationTestExecutor : IMutationTestExecutor
     }
 
     public void Test(IProjectAndTests project, IList<IMutant> mutantsToTest, ITimeoutValueCalculator timeoutMs,
-        TestUpdateHandler updateHandler)
+        TestUpdateHandler updateHandler, bool forceSingle = false)
     {
-        var forceSingle = false;
         while (mutantsToTest.Any())
         {
             var result = RunTestSession(project, mutantsToTest, timeoutMs, updateHandler, forceSingle);

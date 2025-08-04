@@ -83,7 +83,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
             // Assert
             foreach (var candidate in candidates)
             {
-                candidate.Count.ShouldBeGreaterThanOrEqualTo(2, "Each HOM should contain at least two FOMs");
+                candidate.Order.ShouldBeGreaterThanOrEqualTo(2, "Each HOM should contain at least two FOMs");
             }
         }
         
@@ -96,7 +96,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
             // Assert - Most SSHOMS are composed of at most 4 FOMs
             foreach (var candidate in candidates)
             {
-                candidate.Count.ShouldBeLessThanOrEqualTo(4, "HOM order should not exceed the maximum defined limit");
+                candidate.Order.ShouldBeLessThanOrEqualTo(4, "HOM order should not exceed the maximum defined limit");
             }
         }
         
@@ -111,7 +111,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
             var candidateKeys = new HashSet<string>();
             foreach (var candidate in candidates)
             {
-                string key = string.Join(",", candidate.OrderBy(m => m.Id).Select(m => m.Id));
+                string key = string.Join(",", candidate.ConstituentMutants.OrderBy(m => m.Id).Select(m => m.Id));
                 candidateKeys.Add(key).ShouldBeTrue($"Duplicate found: {key}");
             }
         }

@@ -108,14 +108,16 @@ public class MutationTestProcess : IMutationTestProcess
     private void TestMutants(IEnumerable<IMutant> mutantsToTest)
     {
         IEnumerable<List<IMutant>> testBatches;
+        bool forceSingle = false;
 
         if (_options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutations))
         {
-            testBatches = BuildHigherOrderMutants(mutantsToTest.ToList());
+            testBatches = [[.. BuildHigherOrderMutants([.. mutantsToTest])]];
+            forceSingle = true;
         }
         else
         {
-            testBatches = BuildMutantGroupsForTest(mutantsToTest.ToList());
+            testBatches = BuildMutantGroupsForTest([.. mutantsToTest]);
         }            
 
         var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = _options.Concurrency };
@@ -127,7 +129,7 @@ public class MutationTestProcess : IMutationTestProcess
             _mutationTestExecutor.Test(Input.SourceProjectInfo, mutants,
                 Input.InitialTestRun.TimeoutValueCalculator,
                 (testedMutants, tests, ranTests, outTests) =>
-                    TestUpdateHandler(testedMutants, tests, ranTests, outTests, reportedMutants));
+                    TestUpdateHandler(testedMutants, tests, ranTests, outTests, reportedMutants), forceSingle);
 
             OnMutantsTested(mutants, reportedMutants);
         });
@@ -202,37 +204,29 @@ public class MutationTestProcess : IMutationTestProcess
         return true;
     }
 
-    private IEnumerable<List<IMutant>> BuildHigherOrderMutants(IReadOnlyCollection<IMutant> mutantsToTest)
+    private IEnumerable<IMutant> BuildHigherOrderMutants(IReadOnlyCollection<IMutant> mutantsToTest)
     {
-        if (!_options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutations))
-        {
-            return new List<List<IMutant>> { mutantsToTest.ToList() };
-        }
+        // Create the HigherOrderMutation instance and delegate all logic to it
         var higherOrderMutation = new HigherOrderMutation(_options, Input, mutantsToTest);
+        Input.HigherOrderMutation = higherOrderMutation;
 
-        var heuristics = new List<IHOMHeuristic>();
+        // Use the centralized method that handles all the complexity
+        var result = higherOrderMutation.BuildAndOptimizeHigherOrderMutants(
+            mutantsToTest,
+            isPreTestRun: null, // Auto-detect based on test execution data
+            customAlgorithms: null, // Use defaults
+            customHeuristics: null, // Use defaults
+            validateSSHOM: true,
+            requireProperSubset: false,
+            includeMissingMutants: true,
+            algorithmName: null // Use first available algorithm
+        );
 
-        var searchAlgorithm = new LocalSearchAlgorithm(Input, heuristics, _options, mutantsToTest);
+        // Log the metadata for debugging
+        Logger.LogDebug("HOM Generation completed: {AlgorithmUsed}, {CandidatesGenerated} candidates, {HeuristicsUsed} heuristics, {GenerationTime}ms",
+            result.AlgorithmUsed, result.CandidatesGenerated, result.HeuristicsUsed, result.GenerationTime.TotalMilliseconds);
 
-        higherOrderMutation.AddSearchAlgorithm(searchAlgorithm);
-
-        var higherOrderMutants = higherOrderMutation.CreateCandidateHOMs().ToList();
-
-        // make sure that all mutants which do not occur in higher order mutants are still tested
-        var mutantsMissingFromHoms = mutantsToTest.Where(m => !higherOrderMutants.Any(h => h.Contains(m))).ToList();
-        if (mutantsMissingFromHoms.Count > 0)
-        {
-            Logger.LogDebug("Some mutants were not included in higher order mutants: {MutantsNotRun}",
-                mutantsMissingFromHoms.Select(m => m.Id));
-            // if there are mutants not run, we add them as a group
-            higherOrderMutants.Add(mutantsMissingFromHoms);
-        }
-
-        if (higherOrderMutants.Count == 0)
-        {
-            return new List<List<IMutant>> { mutantsToTest.ToList() };
-        }
-        return higherOrderMutants.Select(x => x.ToList());
+        return result.MutantGroups;
     }
 
 

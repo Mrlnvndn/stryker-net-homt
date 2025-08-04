@@ -50,6 +50,11 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         public virtual bool IsFitnessScoringHeuristic => Weight > 0;
 
         /// <summary>
+        /// Indicates wether this heuristic requires a pre-run to gather context data like what tests kill it.
+        /// </summary>
+        public virtual bool RequiresPreRun => false;
+
+        /// <summary>
         /// Protected properties to store data used by the heuristic.
         /// </summary>
         protected IReadOnlyCollection<IMutant> AvailableFOMs { get; private set; }

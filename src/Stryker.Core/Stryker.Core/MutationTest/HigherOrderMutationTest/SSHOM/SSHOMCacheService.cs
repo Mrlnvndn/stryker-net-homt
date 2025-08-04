@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Text.Json;
 
-namespace Stryker.Core.MutationTest
+namespace Stryker.Core.MutationTest.HigherOrderMutationTest.SSHOM
 {
     public static class SSHOMCacheService
     {

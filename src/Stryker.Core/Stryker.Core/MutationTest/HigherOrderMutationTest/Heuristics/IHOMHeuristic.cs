@@ -37,6 +37,8 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// </summary>
         bool IsFitnessScoringHeuristic { get; }
 
+        bool RequiresPreRun { get; }
+
         /// <summary>
         /// Initializes the heuristic with context data.
         /// </summary>

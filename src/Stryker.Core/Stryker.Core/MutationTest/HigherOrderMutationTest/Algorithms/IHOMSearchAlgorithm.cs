@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Stryker.Abstractions;
 using Stryker.Abstractions.Options;
+using Stryker.Core.Mutants;
 using Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics;
 
 namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
@@ -20,7 +21,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         /// <param name="options">Stryker options.</param>
         /// <param name="input">Mutation test input for additional context.</param>
         /// <returns>An enumerable of lists, where each inner list represents a candidate HOM.</returns>
-        IEnumerable<List<IMutant>> GenerateCandidates(
+        IEnumerable<HigherOrderMutant> GenerateCandidates(
             IReadOnlyCollection<IMutant> availableFOMs,
             IReadOnlyList<IHOMHeuristic> heuristics,
             IStrykerOptions options,
