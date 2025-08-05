@@ -20,6 +20,9 @@ public interface IStrykerInputs
     DiffIgnoreChangesInput DiffIgnoreChangesInput { get; init; }
     DisableBailInput DisableBailInput { get; set; }
     DisableMixMutantsInput DisableMixMutantsInput { get; set; }
+
+    EnableHigherOrderMutantsInput EnableHigherOrderMutantsInput { get; set; }
+
     IgnoreMutationsInput IgnoreMutationsInput { get; init; }
     FallbackVersionInput FallbackVersionInput { get; init; }
     IgnoreMethodsInput IgnoredMethodsInput { get; init; }
@@ -102,6 +105,8 @@ public class StrykerInputs : IStrykerInputs
     public CoverageAnalysisInput CoverageAnalysisInput { get; init; } = new();
     public DisableBailInput DisableBailInput { get; set; } = new();
     public DisableMixMutantsInput DisableMixMutantsInput { get; set; } = new();
+
+    public EnableHigherOrderMutantsInput EnableHigherOrderMutantsInput { get; set; } = new();
     public MsBuildPathInput MsBuildPathInput { get; init; } = new();
     public OpenReportInput OpenReportInput { get; init; } = new();
     public OpenReportEnabledInput OpenReportEnabledInput { get; init; } = new();
@@ -150,7 +155,7 @@ public class StrykerInputs : IStrykerInputs
             IgnoredMethods = IgnoredMethodsInput.Validate(),
             Mutate = MutateInput.Validate(),
             LanguageVersion = LanguageVersionInput.Validate(),
-            OptimizationMode = CoverageAnalysisInput.Validate() | DisableBailInput.Validate() | DisableMixMutantsInput.Validate(),
+            OptimizationMode = CoverageAnalysisInput.Validate() | DisableBailInput.Validate() | DisableMixMutantsInput.Validate() | EnableHigherOrderMutantsInput.Validate(),
             TestProjects = TestProjectsInput.Validate(),
             TestCaseFilter = TestCaseFilterInput.Validate(),
             DashboardUrl = DashboardUrlInput.Validate(),

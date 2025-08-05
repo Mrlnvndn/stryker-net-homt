@@ -110,7 +110,7 @@ public class MutationTestProcess : IMutationTestProcess
         IEnumerable<List<IMutant>> testBatches;
         bool forceSingle = false;
 
-        if (_options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutations))
+        if (_options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutants))
         {
             testBatches = [[.. BuildHigherOrderMutants([.. mutantsToTest])]];
             forceSingle = true;
@@ -212,14 +212,7 @@ public class MutationTestProcess : IMutationTestProcess
 
         // Use the centralized method that handles all the complexity
         var result = higherOrderMutation.BuildAndOptimizeHigherOrderMutants(
-            mutantsToTest,
-            isPreTestRun: null, // Auto-detect based on test execution data
-            customAlgorithms: null, // Use defaults
-            customHeuristics: null, // Use defaults
-            validateSSHOM: true,
-            requireProperSubset: false,
-            includeMissingMutants: true,
-            algorithmName: null // Use first available algorithm
+            mutantsToTest, isPreTestRun: true, includeAllIndividualMutants: true
         );
 
         // Log the metadata for debugging

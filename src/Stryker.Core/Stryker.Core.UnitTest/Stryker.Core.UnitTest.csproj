@@ -54,4 +54,8 @@
     <ProjectReference Include="..\..\Stryker.Utilities\Stryker.Utilities.csproj" />
     <ProjectReference Include="..\Stryker.Core\Stryker.Core.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="MutationTest\HigherOrderMutationTest\ExampleSourceCode\" />
+  </ItemGroup>
 </Project>

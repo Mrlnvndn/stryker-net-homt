@@ -31,6 +31,13 @@ public class CommandLineConfigReaderTests
     }
 
     [TestMethod]
+    public void ShouldHandleEnableHigherOrderMutants()
+    {
+        _target.ReadCommandLineConfig(new[] { "--enable-higher-order-mutants" }, _app, _inputs);
+        _inputs.EnableHigherOrderMutantsInput.SuppliedInput.ShouldBe(true);
+    }
+
+    [TestMethod]
     public void ShouldHandleSingleValue()
     {
         _target.ReadCommandLineConfig(new[] { "--concurrency 4" }, _app, _inputs);

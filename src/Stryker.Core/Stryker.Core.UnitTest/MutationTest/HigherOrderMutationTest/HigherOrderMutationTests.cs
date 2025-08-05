@@ -200,7 +200,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
             _sut.AddSearchAlgorithm(algorithmMock.Object);
 
             // Assert - Should not throw and algorithm should be usable
-            var candidates = _sut.CreateCandidateHOMs("TestAlgorithm").ToList();
+            var candidates = _sut.CreateCandidateHOMs().ToList();
             algorithmMock.Verify(a => a.GenerateCandidates(
                 It.IsAny<IReadOnlyCollection<IMutant>>(),
                 It.IsAny<IReadOnlyList<IHOMHeuristic>>(),
@@ -220,7 +220,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
             _sut.AddSearchAlgorithm(algorithm2.Object); // Should be ignored
 
             // Assert
-            var candidates = _sut.CreateCandidateHOMs("TestAlgorithm").ToList();
+            var candidates = _sut.CreateCandidateHOMs().ToList();
 
             // Only the first algorithm should be called
             algorithm1.Verify(a => a.GenerateCandidates(
@@ -257,7 +257,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
             // Act
             _sut.AddHeuristic(heuristicMock.Object);
             _sut.AddSearchAlgorithm(algorithmMock.Object);
-            var candidates = _sut.CreatePreTestCandidateHOMs().ToList();
+            var candidates = _sut.CreateCandidateHOMs().ToList();
 
             // Assert - Algorithm should receive the heuristic
             algorithmMock.Verify(a => a.GenerateCandidates(
@@ -320,7 +320,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
         }
 
         [TestMethod]
-        public void CreateCandidateHOMs_WithSpecificAlgorithm_ShouldUseSpecifiedAlgorithm()
+        public void CreateCandidateHOMs_WithSpecificAlgorithm_ShouldUseAlgorithmAddedFirst()
         {
             // Arrange
             var algorithm1 = CreateMockAlgorithm("Algorithm1");
@@ -330,34 +330,20 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
             _sut.AddSearchAlgorithm(algorithm2.Object);
 
             // Act
-            var candidates = _sut.CreateCandidateHOMs("Algorithm2").ToList();
+            var candidates = _sut.CreateCandidateHOMs().ToList();
 
             // Assert
-            algorithm2.Verify(a => a.GenerateCandidates(
+            algorithm1.Verify(a => a.GenerateCandidates(
                 It.IsAny<IReadOnlyCollection<IMutant>>(),
                 It.IsAny<IReadOnlyList<IHOMHeuristic>>(),
                 It.IsAny<IStrykerOptions>(),
                 It.IsAny<MutationTestInput>()), Times.Once);
 
-            algorithm1.Verify(a => a.GenerateCandidates(
+            algorithm2.Verify(a => a.GenerateCandidates(
                 It.IsAny<IReadOnlyCollection<IMutant>>(),
                 It.IsAny<IReadOnlyList<IHOMHeuristic>>(),
                 It.IsAny<IStrykerOptions>(),
                 It.IsAny<MutationTestInput>()), Times.Never);
-        }
-
-        [TestMethod]
-        public void CreateCandidateHOMs_WithNonExistentAlgorithm_ShouldReturnEmpty()
-        {
-            // Arrange
-            var algorithmMock = CreateMockAlgorithm("ExistingAlgorithm");
-            _sut.AddSearchAlgorithm(algorithmMock.Object);
-
-            // Act
-            var candidates = _sut.CreateCandidateHOMs("NonExistentAlgorithm").ToList();
-
-            // Assert
-            candidates.ShouldBeEmpty();
         }
 
         [TestMethod]
@@ -430,6 +416,8 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
         public void CreateCandidateHOMs_WithDifferentAlgorithms_ShouldProduceDifferentResults()
         {
             // Arrange
+            var sut2 = new HigherOrderMutation(_optionsMock.Object, _inputMock.Object, _testMutants);
+
             var algorithm1 = CreateMockAlgorithm("Algorithm1");
             var algorithm2 = CreateMockAlgorithm("Algorithm2");
 
@@ -455,11 +443,12 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
                 });
 
             _sut.AddSearchAlgorithm(algorithm1.Object);
-            _sut.AddSearchAlgorithm(algorithm2.Object);
+
+            sut2.AddSearchAlgorithm(algorithm2.Object);
 
             // Act
-            var candidates1 = _sut.CreateCandidateHOMs("Algorithm1").ToList();
-            var candidates2 = _sut.CreateCandidateHOMs("Algorithm2").ToList();
+            var candidates1 = _sut.CreateCandidateHOMs().ToList();
+            var candidates2 = sut2.CreateCandidateHOMs().ToList();
 
             // Assert
             candidates1.ShouldNotBeEmpty();

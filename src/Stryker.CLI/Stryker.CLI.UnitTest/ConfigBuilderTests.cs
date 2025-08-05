@@ -210,6 +210,7 @@ public class ConfigBuilderTests
         inputs.Setup(x => x.CoverageAnalysisInput).Returns(new CoverageAnalysisInput());
         inputs.Setup(x => x.DisableBailInput).Returns(new DisableBailInput());
         inputs.Setup(x => x.DisableMixMutantsInput).Returns(new DisableMixMutantsInput());
+        inputs.Setup(x => x.EnableHigherOrderMutantsInput).Returns(new EnableHigherOrderMutantsInput());
         inputs.Setup(x => x.AdditionalTimeoutInput).Returns(new AdditionalTimeoutInput());
         inputs.Setup(x => x.ProjectNameInput).Returns(new ProjectNameInput());
         inputs.Setup(x => x.ModuleNameInput).Returns(new ModuleNameInput());

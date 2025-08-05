@@ -135,7 +135,7 @@ public class StrykerRunner : IStrykerRunner
             reporters.OnAllMutantsTested(rootComponent, combinedTestProjectsInfo);
 
             // Run SSHOM analysis if Higher-Order Mutations are enabled here temprarily, integrate with ONAllMutantsTested in the future
-            if (options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutations))
+            if (options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutants))
             {
                 foreach (var project in _mutationTestProcesses)
                 {
@@ -151,7 +151,6 @@ public class StrykerRunner : IStrykerRunner
                     }
                 }
             }
-
 
             return new StrykerRunResult(options, rootComponent.GetMutationScore());
         }

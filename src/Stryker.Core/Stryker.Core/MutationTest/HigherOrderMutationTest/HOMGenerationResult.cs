@@ -32,33 +32,6 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
         }
 
         /// <summary>
-        /// Additional constructor for more parameters.
-        /// </summary>
-        public HOMGenerationResult(
-            IEnumerable<IMutant> mutantGroups,
-            bool isPreTestRun,
-            string algorithmUsed,
-            int heuristicsUsed,
-            int candidatesGenerated,
-            int candidatesFiltered,
-            int mutantsIncludedInHOMs,
-            int mutantsMissingFromHOMs,
-            TimeSpan generationTime,
-            IEnumerable<HigherOrderMutant> candidatesCreated = null)
-        {
-            MutantGroups = mutantGroups.ToList();
-            IsPreTestRun = isPreTestRun;
-            AlgorithmUsed = algorithmUsed ?? "Unknown";
-            HeuristicsUsed = heuristicsUsed;
-            CandidatesGenerated = candidatesGenerated;
-            CandidatesFiltered = candidatesFiltered;
-            MutantsIncludedInHOMs = mutantsIncludedInHOMs;
-            MutantsMissingFromHOMs = mutantsMissingFromHOMs;
-            GenerationTime = generationTime;
-            CandidatesCreated = candidatesCreated?.ToList() ?? new List<HigherOrderMutant>();
-        }
-
-        /// <summary>
         /// The generated HOM groups ready for testing.
         /// </summary>
         public IReadOnlyList<IMutant> MutantGroups { get; }

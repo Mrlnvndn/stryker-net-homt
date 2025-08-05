@@ -46,6 +46,7 @@ public static class FileConfigGenerator
                 CoverageAnalysis = inputs.CoverageAnalysisInput.SuppliedInput ?? inputs.CoverageAnalysisInput.Default,
                 DisableBail = inputs.DisableBailInput.SuppliedInput ?? inputs.DisableBailInput.Default,
                 DisableMixMutants = inputs.DisableMixMutantsInput.SuppliedInput ?? inputs.DisableMixMutantsInput.Default,
+                EnableHigherOrderMutants = inputs.EnableHigherOrderMutantsInput.SuppliedInput ?? inputs.EnableHigherOrderMutantsInput.Default,
                 AdditionalTimeout = inputs.AdditionalTimeoutInput.SuppliedInput ?? inputs.AdditionalTimeoutInput.Default,
                 Mutate = inputs.MutateInput.SuppliedInput?.ToArray() ?? inputs.MutateInput.Default.ToArray(),
                 MutationLevel = inputs.MutationLevelInput.SuppliedInput ?? inputs.MutationLevelInput.Default,

@@ -66,7 +66,6 @@ public class HigherOrderMutant : IMutant
     public int Order => ConstituentMutants.Count;
 
     // IMutant implementation
-
     public int Id { get; set; }
     public Mutation Mutation { get; set; }
     public MutantStatus ResultStatus { get; set; }

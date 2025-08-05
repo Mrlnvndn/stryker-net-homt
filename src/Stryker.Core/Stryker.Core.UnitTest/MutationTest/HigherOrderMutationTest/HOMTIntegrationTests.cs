@@ -172,13 +172,15 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
             
             var process = new MutationTestProcess(input, options, reporterMock.Object, executorMock.Object);
 
+            var homt = new HigherOrderMutation(options, input, mutants);
+            homt.AddSearchAlgorithm(new LocalSearchAlgorithm(input, [], options, mutants));
+            homt.AddHeuristic(new MaxSizeLimitHeuristic());
+
             // Act - Use reflection to call the private BuildHigherOrderMutants method
-            var buildMethod = typeof(MutationTestProcess).GetMethod("BuildHigherOrderMutants", 
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            var result = (IEnumerable<IMutant>)buildMethod.Invoke(process, new object[] { mutants });
+            var result = homt.BuildAndOptimizeHigherOrderMutants(mutants);
 
             // Assert
-            var homGroups = result.ToList();
+            var homGroups = result.MutantGroups;
             homGroups.ShouldNotBeEmpty("Should create HOM groups");
             homGroups.Where(g => g is HigherOrderMutant).Cast<HigherOrderMutant>().Any(g => g.Order >= 2).ShouldBeTrue("Should have some higher-order mutant groups");
         }
@@ -248,7 +250,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
 
             return new StrykerOptions
             {
-                OptimizationMode = withHOMT ? OptimizationModes.EnableHigherOrderMutations : OptimizationModes.CoverageBasedTest,
+                OptimizationMode = withHOMT ? OptimizationModes.EnableHigherOrderMutants : OptimizationModes.CoverageBasedTest,
                 Concurrency = 1,
                 MutantIdProvider = mutantIdProvider.Object,
             };
@@ -291,7 +293,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
 
         private bool ShouldUseHOMT(IStrykerOptions options)
         {
-            return options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutations);
+            return options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutants);
         }
 
         #endregion

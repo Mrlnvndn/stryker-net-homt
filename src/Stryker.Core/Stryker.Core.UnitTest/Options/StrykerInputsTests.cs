@@ -26,6 +26,7 @@ public class StrykerInputsTests : TestBase
         DiffIgnoreChangesInput = new DiffIgnoreChangesInput(),
         DisableBailInput = new DisableBailInput(),
         DisableMixMutantsInput = new DisableMixMutantsInput(),
+        EnableHigherOrderMutantsInput = new EnableHigherOrderMutantsInput(),
         IgnoreMutationsInput = new IgnoreMutationsInput(),
         FallbackVersionInput = new FallbackVersionInput(),
         IgnoredMethodsInput = new IgnoreMethodsInput(),
@@ -82,6 +83,15 @@ public class StrykerInputsTests : TestBase
         var result = _target.ValidateAll();
 
         result.OptimizationMode.HasFlag(OptimizationModes.DisableBail).ShouldBeTrue();
+        result.OptimizationMode.HasFlag(OptimizationModes.CoverageBasedTest).ShouldBeTrue();
+    }
+
+    [TestMethod]
+    public void EnableHigherOrderMutantsShouldSetOptimizationFlags()
+    {
+        _target.EnableHigherOrderMutantsInput.SuppliedInput = true;
+        var result = _target.ValidateAll();
+        result.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutants).ShouldBeTrue();
         result.OptimizationMode.HasFlag(OptimizationModes.CoverageBasedTest).ShouldBeTrue();
     }
 

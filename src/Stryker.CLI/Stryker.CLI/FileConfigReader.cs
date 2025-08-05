@@ -45,6 +45,9 @@ public static class FileConfigReader
         inputs.CoverageAnalysisInput.SuppliedInput = config.CoverageAnalysis;
         inputs.DisableBailInput.SuppliedInput = config.DisableBail;
         inputs.DisableMixMutantsInput.SuppliedInput = config.DisableMixMutants;
+
+        inputs.EnableHigherOrderMutantsInput.SuppliedInput = config.EnableHigherOrderMutants;
+
         inputs.AdditionalTimeoutInput.SuppliedInput = config.AdditionalTimeout;
         inputs.MutateInput.SuppliedInput = config.Mutate;
         inputs.MutationLevelInput.SuppliedInput = config.MutationLevel;

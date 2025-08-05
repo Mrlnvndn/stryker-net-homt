@@ -58,6 +58,9 @@ public class FileBasedInput : IExtraData
     [JsonPropertyName("disable-mix-mutants")]
     public bool? DisableMixMutants { get; init; }
 
+    [JsonPropertyName("enable-higher-order-mutations")]
+    public bool? EnableHigherOrderMutants { get; init; }
+
     [JsonPropertyName("thresholds")]
     public ThresholdsConfig Thresholds { get; init; }
 

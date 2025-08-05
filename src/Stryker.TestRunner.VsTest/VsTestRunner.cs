@@ -259,7 +259,7 @@ public sealed class VsTestRunner : IDisposable
 
             var isHomt = mutantTestsMap != null &&
              mutantTestsMap.Count > 1 &&
-            _context.Options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutations);
+            _context.Options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutants);
 
             var runSettings = _context.GenerateRunSettings(timeOut, forCoverage, mutantTestsMap,
                 projectAndTests.HelperNamespace, source.TargetFramework, source.TargetPlatform(), isHomt);
