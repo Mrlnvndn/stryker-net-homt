@@ -107,29 +107,30 @@ public class MutationTestProcess : IMutationTestProcess
     //TODO: add creation of homt to this function
     private void TestMutants(IEnumerable<IMutant> mutantsToTest)
     {
-        IEnumerable<List<IMutant>> testBatches;
-        bool forceSingle = false;
+        IEnumerable<IMutant> firstAndHigherOrderMutants;
+        IEnumerable<List<IMutant>> mutantGroups;
 
         if (_options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutants))
         {
-            testBatches = [[.. BuildHigherOrderMutants([.. mutantsToTest])]];
-            forceSingle = true;
+            firstAndHigherOrderMutants = BuildHigherOrderMutants([.. mutantsToTest]);
+
+            mutantGroups = BuildMutantGroupsForTest(firstAndHigherOrderMutants.ToList());
         }
         else
         {
-            testBatches = BuildMutantGroupsForTest([.. mutantsToTest]);
-        }            
+            mutantGroups = BuildMutantGroupsForTest(mutantsToTest.ToList());
+        }
 
         var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = _options.Concurrency };
 
-        Parallel.ForEach(testBatches, parallelOptions, mutants =>
+        Parallel.ForEach(mutantGroups, parallelOptions, mutants =>
         {
             var reportedMutants = new HashSet<IMutant>();
 
             _mutationTestExecutor.Test(Input.SourceProjectInfo, mutants,
                 Input.InitialTestRun.TimeoutValueCalculator,
                 (testedMutants, tests, ranTests, outTests) =>
-                    TestUpdateHandler(testedMutants, tests, ranTests, outTests, reportedMutants), forceSingle);
+                    TestUpdateHandler(testedMutants, tests, ranTests, outTests, reportedMutants));
 
             OnMutantsTested(mutants, reportedMutants);
         });
@@ -208,9 +209,13 @@ public class MutationTestProcess : IMutationTestProcess
     {
         // Create the HigherOrderMutation instance and delegate all logic to it
         var higherOrderMutation = new HigherOrderMutation(_options, Input, mutantsToTest);
+
+        // Add Algorithm to HigherOrderMutation instance
+        var localSearchAlgorithm = new LocalSearchAlgorithm(Input, [],_options, mutantsToTest);
+        higherOrderMutation.AddSearchAlgorithm(localSearchAlgorithm);
+
         Input.HigherOrderMutation = higherOrderMutation;
 
-        // Use the centralized method that handles all the complexity
         var result = higherOrderMutation.BuildAndOptimizeHigherOrderMutants(
             mutantsToTest, isPreTestRun: true, includeAllIndividualMutants: true
         );
@@ -221,7 +226,6 @@ public class MutationTestProcess : IMutationTestProcess
 
         return result.MutantGroups;
     }
-
 
     private IEnumerable<List<IMutant>> BuildMutantGroupsForTest(IReadOnlyCollection<IMutant> mutantsNotRun)
     {

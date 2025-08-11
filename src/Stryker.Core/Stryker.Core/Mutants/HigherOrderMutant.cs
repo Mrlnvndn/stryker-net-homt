@@ -20,9 +20,11 @@ public class HigherOrderMutant : IMutant
         
         // Initialize IMutant properties with sensible defaults
         ResultStatus = MutantStatus.Pending;
-        CoveringTests = TestIdentifierList.NoTest();
         KillingTests = TestIdentifierList.NoTest();
-        AssessingTests = TestIdentifierList.EveryTest();
+        Mutation = CreateCombinedMutation();
+        
+        // CoveringTests and AssessingTests will be calculated lazily when first accessed
+        // This ensures constituent mutants have proper test data from coverage analysis
     }
 
     /// <summary>
@@ -70,14 +72,77 @@ public class HigherOrderMutant : IMutant
     public Mutation Mutation { get; set; }
     public MutantStatus ResultStatus { get; set; }
     public string ResultStatusReason { get; set; }
-    public ITestIdentifiers CoveringTests { get; set; }
+    private ITestIdentifiers _coveringTests;
+    private ITestIdentifiers _assessingTests;
+    public ITestIdentifiers CoveringTests 
+    {
+        get => _coveringTests ??= CalculateCoveringTestsFromConstituents();
+        set => _coveringTests = value;
+    }
+
+    public ITestIdentifiers AssessingTests 
+    {
+        get => _assessingTests ??= CalculateAssessingTestsFromConstituents();
+        set => _assessingTests = value;
+    }
     public ITestIdentifiers KillingTests { get; set; }
-    public ITestIdentifiers AssessingTests { get; set; }
     public bool CountForStats => ResultStatus != MutantStatus.CompileError && ResultStatus != MutantStatus.Ignored;
     public bool IsStaticValue { get; set; }
     public bool MustBeTestedInIsolation { get; set; }
 
     public string DisplayName => $"HOM-{Id}: {string.Join("+", ConstituentMutants.Select(m => m.Id))}";
+
+    /// <summary>
+    /// Calculates covering tests from constituent mutants using union (all tests that cover any constituent).
+    /// </summary>
+    private ITestIdentifiers CalculateCoveringTestsFromConstituents()
+    {
+        if (!ConstituentMutants.Any())
+            return TestIdentifierList.NoTest();
+        
+        // Start with the first mutant's covering tests
+        var result = ConstituentMutants[0].CoveringTests;
+        
+        // Union with all other constituent mutants' covering tests
+        for (var i = 1; i < ConstituentMutants.Count; i++)
+        {
+            result = result.Merge(ConstituentMutants[i].CoveringTests);
+        }
+        
+        return result;
+    }
+
+    /// <summary>
+    /// Calculates assessing tests from constituent mutants using intersection (only tests that assess all constituents).
+    /// This is critical for BuildMutantGroupsForTest compatibility - it determines which tests need to run for this HOM.
+    /// </summary>
+    private ITestIdentifiers CalculateAssessingTestsFromConstituents()
+    {
+        if (!ConstituentMutants.Any())
+            return TestIdentifierList.EveryTest();
+        
+        // Start with the first mutant's assessing tests
+        var result = ConstituentMutants[0].AssessingTests;
+        
+        // Intersect with all other constituent mutants' assessing tests
+        // Only tests that assess ALL constituent mutants can properly assess the HOM
+        for (var i = 1; i < ConstituentMutants.Count; i++)
+        {
+            result = result.Intersect(ConstituentMutants[i].AssessingTests);
+        }
+        
+        return result;
+    }
+
+    /// <summary>
+    /// Creates a combined mutation description for this HOM.
+    /// </summary>
+    private Mutation CreateCombinedMutation() => new()
+    {
+        DisplayName = $"Higher-Order Mutation (Order {Order})",
+        Type = Mutator.HigherOrderMutant, // Use the new specific mutator type for HOMs
+        Description = $"Combination of {Order} mutations: {string.Join(", ", ConstituentMutants.Select(m => m.Id))}"
+    };
 
     public void AnalyzeTestRun(ITestIdentifiers failedTests, ITestIdentifiers resultRanTests, ITestIdentifiers timedOutTests, bool sessionTimedOut)
     {

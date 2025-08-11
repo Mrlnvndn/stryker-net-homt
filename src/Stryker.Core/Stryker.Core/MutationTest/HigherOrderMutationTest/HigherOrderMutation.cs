@@ -123,7 +123,9 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
         public bool ValidateSSHOMFromCandidate(HigherOrderMutant candidate, bool requireProperSubset = false)
         {
             if (candidate == null)
+            {
                 throw new ArgumentNullException(nameof(candidate));
+            }
 
             if (!candidate.HasBeenTested)
             {
