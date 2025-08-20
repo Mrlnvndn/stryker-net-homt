@@ -2,6 +2,7 @@ using System.Linq;
 using Microsoft.Extensions.Logging;
 using Stryker.Abstractions;
 using Stryker.Abstractions.ProjectComponents;
+using Stryker.Core.Mutants;
 using Stryker.Utilities.Logging;
 
 namespace Stryker.Core.Reporters;
@@ -17,7 +18,8 @@ public class FilteredMutantsLogger
 
     public void OnMutantsCreated(IReadOnlyProjectComponent reportComponent)
     {
-        var skippedMutants = reportComponent.Mutants.Where(m => m.ResultStatus != MutantStatus.Pending);
+        var allMutants = reportComponent.Mutants.ToList();
+        var skippedMutants = allMutants.Where(m => m.ResultStatus != MutantStatus.Pending);
 
         var skippedMutantGroups = skippedMutants.GroupBy(x => new { x.ResultStatus, x.ResultStatusReason }).OrderBy(x => x.Key.ResultStatusReason);
 
@@ -35,7 +37,7 @@ public class FilteredMutantsLogger
                 skippedMutants.Count());
         }
 
-        var notRunMutantsWithResultStatusReason = reportComponent.Mutants
+        var notRunMutantsWithResultStatusReason = allMutants
             .Where(m => m.ResultStatus == MutantStatus.Pending && !string.IsNullOrEmpty(m.ResultStatusReason))
             .GroupBy(x => x.ResultStatusReason);
 
@@ -47,7 +49,37 @@ public class FilteredMutantsLogger
                 notRunMutantReason.Key);
         }
 
-        var notRunCount = reportComponent.Mutants.Count(m => m.ResultStatus == MutantStatus.Pending);
+        var notRunCount = allMutants.Count(m => m.ResultStatus == MutantStatus.Pending);
+
+        // Check if we have Higher-Order Mutants
+        var higherOrderMutants = allMutants.OfType<HigherOrderMutant>().ToList();
+        var regularMutants = allMutants.Where(m => !(m is HigherOrderMutant)).ToList();
+        
+        if (higherOrderMutants.Any())
+        {
+            var homPendingCount = higherOrderMutants.Count(m => m.ResultStatus == MutantStatus.Pending);
+            var fomPendingCount = regularMutants.Count(m => m.ResultStatus == MutantStatus.Pending);
+            
+            _logger.LogInformation(LeftPadAndFormatForMutantCount(fomPendingCount, "first-order mutants will be tested"), fomPendingCount);
+            _logger.LogInformation(LeftPadAndFormatForMutantCount(homPendingCount, "higher-order mutants will be tested"), homPendingCount);
+            
+            // Show HOM composition statistics
+            if (homPendingCount > 0)
+            {
+                var avgOrder = higherOrderMutants.Where(h => h.ResultStatus == MutantStatus.Pending).Average(h => h.Order);
+                var maxOrder = higherOrderMutants.Where(h => h.ResultStatus == MutantStatus.Pending).Max(h => h.Order);
+                _logger.LogInformation("Higher-Order Mutants: Average order {0:F1}, Maximum order {1}", avgOrder, maxOrder);
+                
+                var totalConstituentMutants = higherOrderMutants
+                    .Where(h => h.ResultStatus == MutantStatus.Pending)
+                    .SelectMany(h => h.ConstituentMutants)
+                    .Distinct()
+                    .Count();
+                    
+                _logger.LogInformation("Higher-Order Mutants cover {0} unique first-order mutants", totalConstituentMutants);
+            }
+        }
+
         _logger.LogInformation(LeftPadAndFormatForMutantCount(notRunCount, "total mutants will be tested"), notRunCount);
     }
 

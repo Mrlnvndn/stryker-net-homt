@@ -98,8 +98,9 @@ public class HigherOrderMutant : IMutant
     private ITestIdentifiers CalculateCoveringTestsFromConstituents()
     {
         if (!ConstituentMutants.Any())
+        {
             return TestIdentifierList.NoTest();
-        
+        }
         // Start with the first mutant's covering tests
         var result = ConstituentMutants[0].CoveringTests;
         

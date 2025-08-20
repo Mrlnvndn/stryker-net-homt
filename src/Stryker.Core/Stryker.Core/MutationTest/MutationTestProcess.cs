@@ -140,7 +140,9 @@ public class MutationTestProcess : IMutationTestProcess
         ITestIdentifiers timedOutTest, ISet<IMutant> reportedMutants)
     {
         var testsFailingInitially = Input.InitialTestRun.Result.FailingTests.GetIdentifiers().ToHashSet();
-        var continueTestRun = _options.OptimizationMode.HasFlag(OptimizationModes.DisableBail);
+        // Force DisableBail when Higher Order Mutants are enabled to ensure complete killing test collection for SSHOM validation
+        var continueTestRun = _options.OptimizationMode.HasFlag(OptimizationModes.DisableBail) ||
+                              _options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutants);
         if (testsFailingInitially.Count > 0 && failedTests.GetIdentifiers().Any(id => testsFailingInitially.Contains(id)))
         {
             // some of the failing tests where failing without any mutation
@@ -149,9 +151,22 @@ public class MutationTestProcess : IMutationTestProcess
                 failedTests.GetIdentifiers().Where(t => !testsFailingInitially.Contains(t)));
         }
 
+        var updatedHoms = new HashSet<int>(); // Track which HOMs we've already updated
+
         foreach (var mutant in testedMutants)
         {
             mutant.AnalyzeTestRun(failedTests, ranTests, timedOutTest, false);
+
+            // Enhanced HOM status tracking: If this is a FOM that belongs to a HOM, update the parent HOM
+            if (mutant.GetType().Name != "HigherOrderMutant")
+            {
+                var parentHom = FindParentHOM(mutant.Id, testedMutants);
+                if (parentHom != null && !updatedHoms.Contains(parentHom.Id))
+                {
+                    UpdateHOMWithFOMResults(parentHom, failedTests, ranTests, timedOutTest);
+                    updatedHoms.Add(parentHom.Id);
+                }
+            }
 
             if (mutant.ResultStatus == MutantStatus.Pending)
             {
@@ -162,6 +177,59 @@ public class MutationTestProcess : IMutationTestProcess
         }
 
         return continueTestRun;
+    }
+
+    /// <summary>
+    /// Finds the parent HOM for a given FOM ID by checking all mutants in the current test group
+    /// </summary>
+    /// <param name="fomId">The FOM ID to find the parent for</param>
+    /// <param name="allMutants">All mutants in the current test group</param>
+    /// <returns>The parent HOM if found, null otherwise</returns>
+    private IMutant FindParentHOM(int fomId, IEnumerable<IMutant> allMutants)
+    {
+        return allMutants.FirstOrDefault(m => 
+            m.GetType().Name == "HigherOrderMutant" &&
+            m.GetType().GetProperty("ConstituentMutants")?.GetValue(m) is IEnumerable<IMutant> constituents &&
+            constituents.Any(c => c.Id == fomId));
+    }
+
+    /// <summary>
+    /// Updates a HOM's status based on its constituent FOMs' results
+    /// </summary>
+    /// <param name="hom">The HOM to update</param>
+    /// <param name="failedTests">Tests that failed during this run</param>
+    /// <param name="ranTests">Tests that ran during this run</param>
+    /// <param name="timedOutTest">Tests that timed out during this run</param>
+    private void UpdateHOMWithFOMResults(IMutant hom, ITestIdentifiers failedTests, ITestIdentifiers ranTests, ITestIdentifiers timedOutTest)
+    {
+        // Get constituent FOMs
+        if (hom.GetType().GetProperty("ConstituentMutants")?.GetValue(hom) is IEnumerable<IMutant> constituentFoms)
+        {
+            var constituentsList = constituentFoms.ToList();
+            
+            // Strategy: HOM is killed if any constituent FOM is killed
+            if (constituentsList.Any(fom => fom.ResultStatus == MutantStatus.Killed))
+            {
+                hom.ResultStatus = MutantStatus.Killed;
+                // Merge killing tests from all killed FOMs
+                var allKillingTests = constituentsList.Where(f => f.ResultStatus == MutantStatus.Killed)
+                                                     .Aggregate(TestIdentifierList.NoTest(), 
+                                                               (current, killedFom) => current.Merge(killedFom.KillingTests));
+                hom.KillingTests = allKillingTests;
+            }
+            else if (constituentsList.Any(fom => fom.ResultStatus == MutantStatus.Timeout))
+            {
+                hom.ResultStatus = MutantStatus.Timeout;
+            }
+            else if (constituentsList.All(fom => fom.ResultStatus == MutantStatus.Survived))
+            {
+                hom.ResultStatus = MutantStatus.Survived;
+            }
+            // If some constituents are still pending, keep HOM as pending
+            
+            Logger.LogDebug("HOM {Id} status updated to {Status} based on constituent FOMs", 
+                hom.Id, hom.ResultStatus);
+        }
     }
 
     private void OnMutantsTested(IEnumerable<IMutant> mutants, ISet<IMutant> reportedMutants)
@@ -265,6 +333,7 @@ public class MutationTestProcess : IMutationTestProcess
                 {
                     continue;
                 }
+                
 
                 // add this mutant to the block
                 nextBlock.Add(currentMutant);

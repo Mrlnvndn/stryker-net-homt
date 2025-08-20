@@ -93,4 +93,44 @@ public class StatusReporterTests : TestBase
         _loggerMock.Verify(LogLevel.Information, "1     total mutants will be tested", Times.Once);
         _loggerMock.VerifyNoOtherCalls();
     }
+
+    [TestMethod]
+    public void ShouldPrintHigherOrderMutantInformation()
+    {
+        var target = new FilteredMutantsLogger(_loggerMock.Object);
+
+        var folder = new CsharpFolderComposite();
+        
+        // Create some first-order mutants
+        var fom1 = new Mutant() { Id = 1, ResultStatus = MutantStatus.Pending };
+        var fom2 = new Mutant() { Id = 2, ResultStatus = MutantStatus.Pending };
+        var fom3 = new Mutant() { Id = 3, ResultStatus = MutantStatus.Pending };
+        
+        // Create a higher-order mutant
+        var hom = new HigherOrderMutant(new List<IMutant> { fom1, fom2 })
+        {
+            Id = 100,
+            ResultStatus = MutantStatus.Pending
+        };
+
+        folder.Add(new CsharpFileLeaf()
+        {
+            Mutants = new Collection<IMutant>()
+            {
+                fom1,
+                fom2, 
+                fom3,
+                hom
+            }
+        });
+
+        target.OnMutantsCreated(folder);
+
+        _loggerMock.Verify(LogLevel.Information, "3     first-order mutants will be tested", Times.Once);
+        _loggerMock.Verify(LogLevel.Information, "1     higher-order mutants will be tested", Times.Once);
+        _loggerMock.Verify(LogLevel.Information, "Higher-Order Mutants: Average order 2.0, Maximum order 2", Times.Once);
+        _loggerMock.Verify(LogLevel.Information, "Higher-Order Mutants cover 2 unique first-order mutants", Times.Once);
+        _loggerMock.Verify(LogLevel.Information, "4     total mutants will be tested", Times.Once);
+        _loggerMock.VerifyNoOtherCalls();
+    }
 }

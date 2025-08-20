@@ -120,10 +120,13 @@ public sealed class VsTestRunner : IDisposable
             var timedOutTest = new WrappedIdentifierEnumeration(handler.TestsInTimeout?.Select(t => t.Id.ToString()));
             var remainingMutants = update?.Invoke(mutants, failedTest, tests, timedOutTest);
 
+            var shouldContinueTestRun = _context.Options.OptimizationMode.HasFlag(OptimizationModes.DisableBail) ||
+                           _context.Options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutants);
+
             if (remainingMutants != false
                 || handlerTestResults.Count >= expectedTests
                 || _currentSessionCancelled
-                || _context.Options.OptimizationMode.HasFlag(OptimizationModes.DisableBail))
+                || shouldContinueTestRun)
             {
                 return;
             }
@@ -146,6 +149,9 @@ public sealed class VsTestRunner : IDisposable
 
     private ICollection<string> TestCases(IReadOnlyList<IMutant> mutants, Dictionary<int, ITestIdentifiers> mutantTestsMap)
     {
+        var homToFomMapping = new Dictionary<int, List<int>>();
+        var fomToHomMapping = new Dictionary<int, int>();
+        
         ICollection<string> testCases;
         // if we optimize the number of tests to run
         if (_context.Options.OptimizationMode.HasFlag(OptimizationModes.CoverageBasedTest))
@@ -155,7 +161,44 @@ public sealed class VsTestRunner : IDisposable
             {
                 var tests = mutant.AssessingTests;
                 needAll = needAll || tests.IsEveryTest;
-                mutantTestsMap.Add(mutant.Id, tests);
+                
+                // Enhanced HOM handling with dual-mode XML generation
+                if (mutant.GetType().Name == "HigherOrderMutant")
+                {
+                    // CRITICAL: Add BOTH HOM and FOM IDs to mutantTestsMap
+                    mutantTestsMap.Add(mutant.Id, tests); // HOM for status tracking
+                    
+                    // Use reflection to get ConstituentMutants property
+                    var constituentMutantsProperty = mutant.GetType().GetProperty("ConstituentMutants");
+                    if (constituentMutantsProperty?.GetValue(mutant) is IEnumerable<IMutant> constituentMutants)
+                    {
+                        var fomIds = new List<int>();
+                        
+                        // Add each constituent FOM with the same assessing tests
+                        foreach (var constituentMutant in constituentMutants)
+                        {
+                            // Add FOM for MutantControl activation
+                            mutantTestsMap.Add(constituentMutant.Id, tests);
+                            
+                            // Create bidirectional mapping
+                            fomIds.Add(constituentMutant.Id);
+                            fomToHomMapping[constituentMutant.Id] = mutant.Id;
+                        }
+                        
+                        homToFomMapping[mutant.Id] = fomIds;
+                    }
+                    else
+                    {
+                        // Fallback if reflection fails
+                        _logger.LogWarning("Failed to extract constituent mutants from HOM {Id}, using fallback", mutant.Id);
+                        // HOM already added above, no need to re-add
+                    }
+                }
+                else
+                {
+                    // Regular FOM - add as is
+                    mutantTestsMap.Add(mutant.Id, tests);
+                }
             }
 
             testCases = needAll ? null : mutants.SelectMany(m => m.AssessingTests.GetIdentifiers()).ToList();
@@ -173,9 +216,45 @@ public sealed class VsTestRunner : IDisposable
                     "Internal error: trying to test multiple mutants simultaneously without 'perTest' coverage analysis.");
             }
 
-            mutantTestsMap.Add(mutants[0].Id, TestIdentifierList.EveryTest());
+            var mutant = mutants[0];
+            // Enhanced HOM handling for non-coverage-based mode
+            if (mutant.GetType().Name == "HigherOrderMutant")
+            {
+                // Add HOM for status tracking
+                mutantTestsMap.Add(mutant.Id, TestIdentifierList.EveryTest());
+                
+                var constituentMutantsProperty = mutant.GetType().GetProperty("ConstituentMutants");
+                if (constituentMutantsProperty?.GetValue(mutant) is IEnumerable<IMutant> constituentMutants)
+                {
+                    var fomIds = new List<int>();
+                    
+                    foreach (var constituentMutant in constituentMutants)
+                    {
+                        // Add FOM for MutantControl activation
+                        mutantTestsMap.Add(constituentMutant.Id, TestIdentifierList.EveryTest());
+                        
+                        // Create bidirectional mapping
+                        fomIds.Add(constituentMutant.Id);
+                        fomToHomMapping[constituentMutant.Id] = mutant.Id;
+                    }
+                    
+                    homToFomMapping[mutant.Id] = fomIds;
+                }
+                else
+                {
+                    _logger.LogWarning("Failed to extract constituent mutants from HOM {Id}, using fallback", mutant.Id);
+                    // HOM already added above
+                }
+            }
+            else
+            {
+                mutantTestsMap.Add(mutant.Id, TestIdentifierList.EveryTest());
+            }
             testCases = null;
         }
+
+        // Store mappings in context for XML generation
+        _context.SetHomMappings(homToFomMapping, fomToHomMapping);
 
         return testCases;
     }
@@ -257,9 +336,9 @@ public sealed class VsTestRunner : IDisposable
                 continue;
             }
 
+            // FIXED:
             var isHomt = mutantTestsMap != null &&
-             mutantTestsMap.Count > 1 &&
-            _context.Options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutants);
+                _context.Options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutants);
 
             var runSettings = _context.GenerateRunSettings(timeOut, forCoverage, mutantTestsMap,
                 projectAndTests.HelperNamespace, source.TargetFramework, source.TargetPlatform(), isHomt);

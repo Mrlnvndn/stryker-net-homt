@@ -63,7 +63,7 @@ namespace Stryker.DataCollector
 
         public static string GetVsTestSettings(bool needCoverage,
             IEnumerable<(int mutant, IEnumerable<Guid> coveringTests)> mutantTestsMap,
-            string helperNameSpace, bool isHomt = false)
+            string helperNameSpace, bool isHomt = false, Dictionary<int, List<int>> homToFomMapping = null)
         {
             var codeBase = typeof(CoverageCollector).GetTypeInfo().Assembly.Location;
             var qualifiedName = typeof(CoverageCollector).AssemblyQualifiedName;
@@ -88,10 +88,35 @@ namespace Stryker.DataCollector
             }
             if (mutantTestsMap != null)
             {
+                // Enhanced XML generation with HOM/FOM relationship metadata
                 foreach (var (mutant, coveringTests) in mutantTestsMap)
                 {
-                    configuration.AppendFormat("<Mutant id='{0}' tests='{1}'/>", mutant,
-                        coveringTests == null ? "" : string.Join(",", coveringTests));
+                    var testGuids = coveringTests == null ? "" : string.Join(",", coveringTests);
+                    
+                    // Check if this is a HOM with constituent FOMs
+                    if (homToFomMapping?.ContainsKey(mutant) == true)
+                    {
+                        // This is a HOM - add with metadata
+                        configuration.AppendFormat("<Mutant id='{0}' tests='{1}' type='hom' constituents='{2}'/>", 
+                            mutant, testGuids, string.Join(",", homToFomMapping[mutant]));
+                    }
+                    else
+                    {
+                        // Check if this is a FOM that belongs to a HOM
+                        var parentHomId = homToFomMapping?.FirstOrDefault(kvp => kvp.Value.Contains(mutant)).Key;
+                        if (parentHomId.HasValue && parentHomId != 0)
+                        {
+                            // This is a constituent FOM
+                            configuration.AppendFormat("<Mutant id='{0}' tests='{1}' type='fom' parent='{2}'/>", 
+                                mutant, testGuids, parentHomId.Value);
+                        }
+                        else
+                        {
+                            // This is a regular FOM
+                            configuration.AppendFormat("<Mutant id='{0}' tests='{1}' type='fom'/>", 
+                                mutant, testGuids);
+                        }
+                    }
                 }
             }
 
@@ -178,13 +203,15 @@ namespace Stryker.DataCollector
                 coverageControlField.SetValue(null, true);
             }
 
-            if (_isHomt && _isHomtField != null)
+            if (_isHomt)
             {
                 _isHomtField.SetValue(null, true);
                 _activeMutantsField?.SetValue(null, _activeMutations);
             }
-
-            _activeMutantField.SetValue(null, _activeMutation);
+            else
+            {
+                _activeMutantField.SetValue(null, _activeMutation);
+            }
         }
 
         private void SetActiveMutation(string id)
@@ -209,6 +236,7 @@ namespace Stryker.DataCollector
             if (homtNode != null)
             {
                 _isHomt = true;
+                Log("Homt mode is enabled.");
             }
             if (testMapping != null)
             {
@@ -231,11 +259,16 @@ namespace Stryker.DataCollector
             if (coverage != null)
             {
                 _coverageOn = true;
+            }            
+
+            if (_isHomt)
+            {
+                SetActiveMutations(AnyId);
             }
-
-            
-
-            SetActiveMutation(AnyId);
+            else
+            {
+                SetActiveMutation(AnyId);
+            }
         }
 
         private int GetActiveMutantForThisTest(string testId)
