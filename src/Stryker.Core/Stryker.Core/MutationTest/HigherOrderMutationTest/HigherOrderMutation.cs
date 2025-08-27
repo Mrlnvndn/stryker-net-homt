@@ -57,7 +57,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
 
         /// <summary>
         /// Gets HOM candidates that have been validated as SSHOMs.
-        /// </summary>
+        /// /// </summary>
         public IEnumerable<HigherOrderMutant> ValidatedSSHOMs => _homCandidates.Values.Where(c => c.IsValidatedSSHOM == true);
 
 
@@ -298,12 +298,26 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
                     continue;
                 }
                 
+                // Safety check: Skip HOMs with empty assessing tests
+                //if (candidate.AssessingTests?.IsEmpty ?? true)
+                //{
+                //    _logger.LogDebug("Filtered HOM candidate {CandidateOrder} with empty assessing tests - constituent FOMs have no overlapping test coverage", candidate.Order);
+                //    continue;
+                //}
+                
                 // Assign ID and store candidate
                 candidate.Id = _options.MutantIdProvider.NextId();
+                
+                // Create deep copies of constituent mutants with composite IDs
+                candidate.CreateDeepCopies(_options.MutantIdProvider);
+                
                 _homCandidates[candidate.Id] = candidate;
     
                 var mutantIdsKey = string.Join(",", candidate.ConstituentMutants.OrderBy(m => m.Id).Select(m => m.Id));
                 _homCandidatesByMutantIds[mutantIdsKey] = candidate;
+
+                _logger.LogDebug("HOMT: Created HOM {HOMId} with constituent copies: Original FOMs [{OriginalFomIds}] -> Constituent IDs [{ConstituentIds}]",
+                    candidate.Id, candidate.OriginalConstituentMutantIdsString, candidate.ConstituentMutantIdsString);
 
                 yield return candidate;
             }

@@ -63,7 +63,8 @@ namespace Stryker.DataCollector
 
         public static string GetVsTestSettings(bool needCoverage,
             IEnumerable<(int mutant, IEnumerable<Guid> coveringTests)> mutantTestsMap,
-            string helperNameSpace, bool isHomt = false, Dictionary<int, List<int>> homToFomMapping = null)
+            string helperNameSpace, bool isHomt = false, Dictionary<int, List<int>> homToFomMapping = null,
+            Dictionary<int, List<int>> fomToHomMapping = null)
         {
             var codeBase = typeof(CoverageCollector).GetTypeInfo().Assembly.Location;
             var qualifiedName = typeof(CoverageCollector).AssemblyQualifiedName;
@@ -102,13 +103,12 @@ namespace Stryker.DataCollector
                     }
                     else
                     {
-                        // Check if this is a FOM that belongs to a HOM
-                        var parentHomId = homToFomMapping?.FirstOrDefault(kvp => kvp.Value.Contains(mutant)).Key;
-                        if (parentHomId.HasValue && parentHomId != 0)
+                        // Check if this is a FOM that belongs to one or more HOMs
+                        if (fomToHomMapping?.ContainsKey(mutant) == true)
                         {
-                            // This is a constituent FOM
-                            configuration.AppendFormat("<Mutant id='{0}' tests='{1}' type='fom' parent='{2}'/>", 
-                                mutant, testGuids, parentHomId.Value);
+                            // This is a constituent FOM - could belong to multiple HOMs
+                            configuration.AppendFormat("<Mutant id='{0}' tests='{1}' type='fom' parents='{2}'/>", 
+                                mutant, testGuids, string.Join(",", fomToHomMapping[mutant]));
                         }
                         else
                         {

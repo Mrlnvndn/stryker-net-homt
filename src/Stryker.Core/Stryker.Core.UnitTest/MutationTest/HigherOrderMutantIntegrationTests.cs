@@ -30,6 +30,9 @@ public class HigherOrderMutantIntegrationTests : TestBase
         var mutant2 = CreateMutant(2, MutantStatus.Pending, assessingTests: new[] { "Test1", "Test3" });
         var hom = new HigherOrderMutant(new List<IMutant> { mutant1, mutant2 }) { Id = 100 };
 
+        var mockIdProvider = CreateMockIdProvider(1001, 1002);
+        hom.CreateDeepCopies(mockIdProvider.Object);
+
         // HOM's assessing tests should be the intersection: only "Test1"
         hom.AssessingTests.GetIdentifiers().ShouldBe(new[] { "Test1" });
 
@@ -60,6 +63,9 @@ public class HigherOrderMutantIntegrationTests : TestBase
         var mutant2 = CreateMutant(2, MutantStatus.Pending, assessingTests: new[] { "Test3", "Test4" });
         var hom = new HigherOrderMutant(new List<IMutant> { mutant1, mutant2 }) { Id = 101 };
 
+        var mockIdProvider = CreateMockIdProvider(1001, 1002);
+        hom.CreateDeepCopies(mockIdProvider.Object);
+
         // HOM's assessing tests should be empty (no intersection)
         hom.AssessingTests.IsEmpty.ShouldBeTrue();
 
@@ -89,6 +95,11 @@ public class HigherOrderMutantIntegrationTests : TestBase
 
         var mutants = new List<IMutant> { hom1, hom2, hom3 };
 
+        var mockIdProvider = CreateMockIdProvider(1001, 1002, 1003);
+        hom1.CreateDeepCopies(mockIdProvider.Object);
+        hom2.CreateDeepCopies(mockIdProvider.Object);
+        hom3.CreateDeepCopies(mockIdProvider.Object);
+
         // Simulate BuildMutantGroupsForTest logic
         var totalTestsCount = 3; // Test1, Test2, Test3
 
@@ -117,6 +128,11 @@ public class HigherOrderMutantIntegrationTests : TestBase
         var hom2 = new HigherOrderMutant(new List<IMutant> { mutantA, mutantC }) { Id = 201 }; // Intersection: IntegrationTest1
         var hom3 = new HigherOrderMutant(new List<IMutant> { mutantB, mutantC }) { Id = 202 }; // Intersection: IntegrationTest1
 
+        var mockIdProvider = CreateMockIdProvider(1001, 1002, 1003, 1004, 1005, 1006);
+        hom1.CreateDeepCopies(mockIdProvider.Object);
+        hom2.CreateDeepCopies(mockIdProvider.Object);
+        hom3.CreateDeepCopies(mockIdProvider.Object);
+
         // Assert assessing tests calculations
         hom1.AssessingTests.GetIdentifiers().OrderBy(x => x).ShouldBe(new[] { "IntegrationTest1", "UnitTest1" });
         hom2.AssessingTests.GetIdentifiers().ShouldBe(new[] { "IntegrationTest1" });
@@ -131,7 +147,12 @@ public class HigherOrderMutantIntegrationTests : TestBase
         var hom1Copy = new HigherOrderMutant(new List<IMutant> { mutantA, mutantB }) { Id = 200 };
         var hom2Copy = new HigherOrderMutant(new List<IMutant> { mutantA, mutantC }) { Id = 201 };
         var hom3Copy = new HigherOrderMutant(new List<IMutant> { mutantB, mutantC }) { Id = 202 };
-        
+
+        var mockIdProviderCopy = CreateMockIdProvider(1001, 1002, 1003, 1004, 1005, 1006);
+        hom1Copy.CreateDeepCopies(mockIdProviderCopy.Object);
+        hom2Copy.CreateDeepCopies(mockIdProviderCopy.Object);
+        hom3Copy.CreateDeepCopies(mockIdProviderCopy.Object);
+
         hom1Copy.AnalyzeTestRun(failedTests1, ranTests1, TestIdentifierList.NoTest(), false);
         hom2Copy.AnalyzeTestRun(failedTests1, ranTests1, TestIdentifierList.NoTest(), false);
         hom3Copy.AnalyzeTestRun(failedTests1, ranTests1, TestIdentifierList.NoTest(), false);
@@ -167,6 +188,9 @@ public class HigherOrderMutantIntegrationTests : TestBase
         var mutantB = CreateMutant(3, MutantStatus.Pending, assessingTests: new[] { "CommonTest1", "CommonTest2", "ExtraTest2" });
         var hom = new HigherOrderMutant(new List<IMutant> { mutantA, mutantB }) { Id = 300 };
 
+        var mockIdProvider = CreateMockIdProvider(1001, 1002);
+        hom.CreateDeepCopies(mockIdProvider.Object);
+
         // Verify both have the same assessing tests
         regularMutant.AssessingTests.GetIdentifiers().OrderBy(x => x).ShouldBe(hom.AssessingTests.GetIdentifiers().OrderBy(x => x));
 
@@ -193,6 +217,9 @@ public class HigherOrderMutantIntegrationTests : TestBase
             var regularMutantCopy = CreateMutant(1, MutantStatus.Pending, assessingTests: assessingTests);
             var homCopy = new HigherOrderMutant(new List<IMutant> { mutantA, mutantB }) { Id = 300 };
 
+            var mockIdProviderCopy = CreateMockIdProvider(1001, 1002, 1003, 1004, 1005, 1006);
+            homCopy.CreateDeepCopies(mockIdProviderCopy.Object);
+
             var failedTests = new TestIdentifierList(scenario.FailedTests);
             var ranTests = new TestIdentifierList(scenario.RanTests);
 
@@ -217,6 +244,9 @@ public class HigherOrderMutantIntegrationTests : TestBase
 
         // Create HOM with mutants that have no common assessing tests
         var hom = new HigherOrderMutant(new List<IMutant> { mutant1, mutant2, mutant3 }) { Id = 400 };
+
+        var mockIdProvider = CreateMockIdProvider(1001, 1002, 1003);
+        hom.CreateDeepCopies(mockIdProvider.Object);
 
         // Assert the issue
         hom.AssessingTests.IsEmpty.ShouldBeTrue("HOM has no assessing tests due to empty intersection");
@@ -322,5 +352,20 @@ public class HigherOrderMutantIntegrationTests : TestBase
         return groups;
     }
 
+    /// <summary>
+    /// Creates a mock ID provider that returns specified IDs in sequence
+    /// </summary>
+    private static Mock<IProvideId> CreateMockIdProvider(params int[] ids)
+    {
+        var mockIdProvider = new Mock<IProvideId>();
+        var setupSequence = mockIdProvider.SetupSequence(x => x.NextId());
+
+        foreach (var id in ids)
+        {
+            setupSequence = setupSequence.Returns(id);
+        }
+
+        return mockIdProvider;
+    }
     #endregion
 }

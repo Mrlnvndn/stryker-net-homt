@@ -136,6 +136,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             RegisterHeuristic(new SSHOMExpanderHeuristic());
             RegisterHeuristic(new WeakMutatorFilterHeuristic());
             RegisterHeuristic(new SyntaxNodeConflictHeuristic());
+            RegisterHeuristic(new EmptyAssessingTestsFilterHeuristic());
         }
     }
 }

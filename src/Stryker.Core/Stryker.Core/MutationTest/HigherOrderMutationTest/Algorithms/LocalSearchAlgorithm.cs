@@ -89,6 +89,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             _heuristicRegistry.RegisterHeuristic(new MutatorTypeHeuristic());
             _heuristicRegistry.RegisterHeuristic(new WeakMutatorFilterHeuristic());
             _heuristicRegistry.RegisterHeuristic(new SyntaxNodeConflictHeuristic());
+            _heuristicRegistry.RegisterHeuristic(new EmptyAssessingTestsFilterHeuristic());
             
             // For backward compatibility, register the provided legacy heuristic if it's not null
             if (heuristics != null)
