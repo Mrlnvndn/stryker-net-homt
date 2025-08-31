@@ -1,6 +1,11 @@
-using Stryker.Abstractions;
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Stryker.Abstractions;
+using Stryker.Core.Mutants;
 
 namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
 {
@@ -14,12 +19,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// <summary>
         /// The set of preferred mutation types
         /// </summary>
-        private readonly HashSet<string> _preferredMutationTypes;
-        
-        /// <summary>
-        /// Cache of mutant type scores
-        /// </summary>
-        private readonly Dictionary<int, double> _mutantScores = new();
+        private readonly HashSet<Mutator> _preferredMutationTypes;
         
         public override string Name => "MutatorType";
         
@@ -31,33 +31,9 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// Initializes a new instance of the <see cref="MutatorTypeHeuristic"/> class with default
         /// preferred mutation types based on research.
         /// </summary>
-        public MutatorTypeHeuristic() : this([])
+        public MutatorTypeHeuristic()
         {
-            // TODO: fill _defaultPreferredMutationTypes with mutation types that are known to be more likely to form SSHOMs 
-        }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="MutatorTypeHeuristic"/> class with the specified
-        /// preferred mutation types.
-        /// </summary>
-        /// <param name="preferredMutationTypes">A collection of mutation type names to prioritize.</param>
-        public MutatorTypeHeuristic(IEnumerable<string> preferredMutationTypes)
-        {
-            _preferredMutationTypes = new HashSet<string>(preferredMutationTypes);
-        }
-        
-        protected override void OnInitialized()
-        {
-            _mutantScores.Clear();
-            
-            foreach (var mutant in AvailableFOMs)
-            {
-                string mutationType = GetMutationType(mutant);
-                
-                // Higher score for preferred mutation types
-                double score = IsMutationTypePreferred(mutationType) ? 1.0 : 0.3;
-                _mutantScores[mutant.Id] = score;
-            }
         }
         
         public override double ScoreCandidate(List<IMutant> candidate)
@@ -68,23 +44,22 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             }
             
             double totalScore = 0;
-            int scoredMutants = 0;
             
             foreach (var mutant in candidate)
             {
-                if (_mutantScores.TryGetValue(mutant.Id, out double score))
+                if(IsExpressionRemoval(mutant as Mutant))
                 {
-                    totalScore += score;
-                    scoredMutants++;
+                    totalScore += 1.0;
+                    continue;
                 }
-            }
+                if(IsRelationalOrEqualityReplacement(mutant as Mutant))
+                {
+                    totalScore += 1.0;
+                    continue;
+                }               
+            }          
             
-            if (scoredMutants == 0)
-            {
-                return 0.5; // Neutral score if we can't determine mutation types
-            }
-            
-            return NormalizeScore(totalScore / scoredMutants);
+            return NormalizeScore(totalScore);
         }
         
         /// <summary>
@@ -92,24 +67,63 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// </summary>
         /// <param name="mutationType">The mutation type to check.</param>
         /// <returns>True if the mutation type is preferred, false otherwise.</returns>
-        private bool IsMutationTypePreferred(string mutationType)
+        private bool IsMutationTypePreferred(Mutator mutationType)
         {
             return _preferredMutationTypes.Contains(mutationType);
         }
-        
-        /// <summary>
-        /// Gets the mutation type of the specified mutant.
-        /// </summary>
-        /// <param name="mutant">The mutant to get the type for.</param>
-        /// <returns>The mutation type as a string.</returns>
-        private string GetMutationType(IMutant mutant)
+
+        static bool IsExpressionRemoval(Mutant m)
         {
-            // Enums are value types so can't use null conditional operator directly on Type
-            if (mutant?.Mutation == null)
+            var orig = m.Mutation.OriginalNode;
+            var repl = m.Mutation.ReplacementNode;
+
+            bool IsExprStmt(StatementSyntax s) =>
+                s is ExpressionStatementSyntax es &&
+                (es.Expression is AssignmentExpressionSyntax
+                 || es.Expression is InvocationExpressionSyntax
+                 || es.Expression is PostfixUnaryExpressionSyntax
+                 || es.Expression is PrefixUnaryExpressionSyntax);
+
+            bool IsEmptyReplacement(SyntaxNode? n) =>
+                n is null
+                || n.IsKind(SyntaxKind.EmptyStatement)
+                || (n is BlockSyntax b && b.Statements.Count == 0);
+
+            if (orig is StatementSyntax s && IsExprStmt(s) && IsEmptyReplacement(repl))
             {
-                return string.Empty;
+                return true;
             }
-            return mutant.Mutation.Type.ToString();
+
+            // Fallback: a block became empty and previously contained only expr statements
+            if (orig is BlockSyntax ob && repl is BlockSyntax rb && rb.Statements.Count == 0)
+            {
+                return ob.Statements.Any(ss => ss is ExpressionStatementSyntax);
+            }
+
+            return false;
         }
+
+        static bool IsRelationalOrEqualityReplacement(Mutant m)
+        {
+            static bool IsRelOrEq(SyntaxKind k) =>
+                k is SyntaxKind.LessThanExpression
+                  or SyntaxKind.LessThanOrEqualExpression
+                  or SyntaxKind.GreaterThanExpression
+                  or SyntaxKind.GreaterThanOrEqualExpression
+                  or SyntaxKind.EqualsExpression
+                  or SyntaxKind.NotEqualsExpression;
+
+            if (m.Mutation.OriginalNode is BinaryExpressionSyntax o &&
+                m.Mutation.ReplacementNode is BinaryExpressionSyntax r &&
+                IsRelOrEq(o.Kind()) && IsRelOrEq(r.Kind()) &&
+                o.Kind() != r.Kind())
+            {
+                return true;
+            }
+
+            return false;
+
+        }
+
     }
 }

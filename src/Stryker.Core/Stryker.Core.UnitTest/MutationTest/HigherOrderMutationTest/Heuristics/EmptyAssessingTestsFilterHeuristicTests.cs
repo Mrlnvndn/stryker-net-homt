@@ -199,6 +199,40 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Heuristics
             Should.NotThrow(() => _heuristic.Initialize(availableFOMs, _optionsMock.Object, _inputMock.Object));
         }
 
+        [TestMethod]
+        public void ShouldFilterCandidate_PerformanceTest_ShouldBeEfficient()
+        {
+            // Arrange - Create a larger candidate to test performance
+            var largeCandidateWithOverlap = new List<IMutant>();
+            for (int i = 1; i <= 10; i++)
+            {
+                // All mutants share "CommonTest" to ensure they won't be filtered
+                largeCandidateWithOverlap.Add(CreateMockMutant(i, new[] { "CommonTest", $"Test{i}" }));
+            }
+
+            var largeCandidateWithoutOverlap = new List<IMutant>();
+            for (int i = 1; i <= 10; i++)
+            {
+                // Each mutant has unique tests to ensure filtering
+                largeCandidateWithoutOverlap.Add(CreateMockMutant(i, new[] { $"UniqueTest{i}" }));
+            }
+
+            // Act & Assert - Should complete quickly without creating HigherOrderMutant objects
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            
+            var result1 = _heuristic.ShouldFilterCandidate(largeCandidateWithOverlap);
+            var result2 = _heuristic.ShouldFilterCandidate(largeCandidateWithoutOverlap);
+            
+            stopwatch.Stop();
+
+            // Assert results
+            result1.ShouldBeFalse("Large candidate with overlap should not be filtered");
+            result2.ShouldBeTrue("Large candidate without overlap should be filtered");
+            
+            // Performance assertion - should complete very quickly
+            stopwatch.ElapsedMilliseconds.ShouldBeLessThan(10, "Heuristic should be very fast without creating temporary HOM objects");
+        }
+
         private IMutant CreateMockMutant(int id, string[] assessingTests)
         {
             var mutantMock = new Mock<IMutant>();

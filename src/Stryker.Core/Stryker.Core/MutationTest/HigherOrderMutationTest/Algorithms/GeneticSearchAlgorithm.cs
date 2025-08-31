@@ -40,7 +40,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             IHOMHeuristic heuristic,
             IStrykerOptions options,
             IReadOnlyCollection<IMutant> availableMutants,
-            IMutantExecutor executor)
+            bool registerAllHeuristics =false)
         {
             _options = options as StrykerOptions ?? new StrykerOptions();
             _random = new Random();
@@ -48,7 +48,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             _idToKeyCache = new Dictionary<int, string>();
 
             // Initialize heuristic registry with all available heuristics
-            _heuristicRegistry = new HeuristicRegistry(availableMutants, options, mutationTestInput);
+            _heuristicRegistry = new HeuristicRegistry(availableMutants, options, mutationTestInput, registerAllHeuristics);
 
             // For backward compatibility, register the provided legacy heuristic if it's not null
             if (heuristic != null)
@@ -257,7 +257,15 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
 
                 if (candidate.Count >= 2) // Ensure minimum size of 2
                 {
-                    population.Add(candidate);
+                    // Filter candidates early - don't add them to population if they should be filtered
+                    if (!_heuristicRegistry.ShouldFilterCandidate(candidate))
+                    {
+                        population.Add(candidate);
+                    }
+                    else
+                    {
+                        i--; // Try again since this candidate was filtered
+                    }
                 }
                 else
                 {
@@ -500,18 +508,23 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             HashSet<string> allCandidates)
         {
             var candidateKeys = new Dictionary<List<IMutant>, string>();
-            foreach (var candidate in population)
+            
+            // Process candidates in reverse order to safely remove filtered ones
+            for (var i = population.Count - 1; i >= 0; i--)
             {
-                // Skip candidates that should be filtered out according to heuristics
+                var candidate = population[i];
+                
+                // Remove candidates that should be filtered out according to heuristics
                 if (_heuristicRegistry.ShouldFilterCandidate(candidate))
                 {
+                    population.RemoveAt(i);
                     continue;
                 }
 
                 // Ensure we have a cached key for this candidate
                 if (!candidateKeys.ContainsKey(candidate))
                 {
-                    string key = GetCandidateKey(candidate);
+                    var key = GetCandidateKey(candidate);
                     candidateKeys[candidate] = key;
 
                     // Calculate score if not already cached
@@ -586,6 +599,12 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                     var suggestions = _heuristicRegistry.SuggestNextCandidates(candidate, availableFOMs);
                     foreach (var suggestion in suggestions)
                     {
+                        // Filter suggestions early - don't process if they should be filtered
+                        if (_heuristicRegistry.ShouldFilterCandidate(suggestion))
+                        {
+                            continue; // Skip filtered suggestions
+                        }
+
                         // If enforcing uniqueness, check before adding
                         var suggestionKey = CalculateCandidateKey(suggestion);
                         if (!enforceUniqueness || allCandidates == null || allCandidates.Add(suggestionKey))
@@ -636,6 +655,12 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                 if (_random.NextDouble() < _mutationRate)
                 {
                     Mutate(offspring, fomList);
+                }
+
+                // Filter offspring early - don't add to population if it should be filtered
+                if (_heuristicRegistry.ShouldFilterCandidate(offspring))
+                {
+                    continue; // Skip this offspring and try again
                 }
 
                 // Calculate and cache the offspring key

@@ -39,7 +39,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
 
                     if (!string.IsNullOrEmpty(filePath))
                     {
-                        string className = Path.GetFileNameWithoutExtension(filePath);
+                        var className = Path.GetFileNameWithoutExtension(filePath);
                         
                         // Use span start position as part of method identifier
                         // In a real implementation, you would use syntax analysis to get the actual method
@@ -67,12 +67,12 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         {
             if (candidate == null || candidate.Count <= 1)
             {
-                return 1.0; // Single mutant or empty candidate gets top score
+                return 0; // Single mutant or empty candidate gets top score
             }
 
             // Check if all FOMs are from the same method
-            bool allSameMethod = true;
-            string firstMethod = _methodMap.ContainsKey(candidate[0]) ? _methodMap[candidate[0]] : null;
+            var allSameMethod = true;
+            var firstMethod = _methodMap.ContainsKey(candidate[0]) ? _methodMap[candidate[0]] : null;
             
             for (int i = 1; i < candidate.Count && allSameMethod; i++)
             {

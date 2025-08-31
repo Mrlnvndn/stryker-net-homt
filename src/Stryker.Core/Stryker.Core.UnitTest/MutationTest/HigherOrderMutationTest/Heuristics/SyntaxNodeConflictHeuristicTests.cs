@@ -274,7 +274,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Heuristics
             var mutants = new List<IMutant> { CreateMockMutant(1), CreateMockMutant(2) };
             
             // Act - Create HeuristicRegistry with default heuristics
-            var registry = new HeuristicRegistry(mutants, options, input, registerDefaultHeuristics: true);
+            var registry = new HeuristicRegistry(mutants, options, input, registerAllHeuristics: true);
             
             // Assert - Verify SyntaxNodeConflictHeuristic is registered by default
             var registeredHeuristics = registry.RegisteredHeuristics;

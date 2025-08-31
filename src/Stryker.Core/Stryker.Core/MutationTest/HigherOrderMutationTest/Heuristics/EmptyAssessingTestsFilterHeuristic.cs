@@ -1,7 +1,8 @@
+using System.Collections.Generic;
+using System.Linq;
 using Stryker.Abstractions;
 using Stryker.Abstractions.Options;
-using Stryker.Core.Mutants;
-using System.Collections.Generic;
+using Stryker.Abstractions.Testing;
 
 namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
 {
@@ -38,20 +39,34 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
                 return true; // Filter out null or too small candidates
             }
 
-            // Create a temporary HOM to calculate assessing tests intersection
-            var tempHOM = new HigherOrderMutant(candidate);
+            // Calculate assessing tests intersection
+            var assessingTests = candidate[0].AssessingTests;
             
-            // Check if the HOM would have empty assessing tests
-            var hasEmptyAssessingTests = tempHOM.AssessingTests?.IsEmpty ?? true;
-
-            if (hasEmptyAssessingTests)
+            // If first mutant has no assessing tests, the intersection will be empty
+            if (assessingTests?.IsEmpty ?? true)
             {
-                // Log for debugging - this helps identify problematic HOM candidates
-                // Note: We don't have logger access in heuristics, but the filtering will prevent issues
-                return true; // Filter out candidates with empty assessing tests
+                return true; // Filter out - no shared tests possible
+            }
+            
+            // Calculate intersection of assessing tests from all constituent mutants
+            for (var i = 1; i < candidate.Count; i++)
+            {
+                var mutantAssessingTests = candidate[i].AssessingTests;
+                if (mutantAssessingTests?.IsEmpty ?? true)
+                {
+                    return true; // Filter out - one mutant has no tests, so intersection is empty
+                }
+                
+                assessingTests = assessingTests.Intersect(mutantAssessingTests);
+                
+                // Early exit if intersection becomes empty
+                if (assessingTests.IsEmpty)
+                {
+                    return true; // Filter out - no shared assessing tests
+                }
             }
 
-            return false; // Don't filter - candidate is valid
+            return false; // Don't filter - candidate has non-empty assessing tests
         }
 
         public override List<List<IMutant>> SuggestNextCandidates(List<IMutant> currentCandidate, IReadOnlyCollection<IMutant> availableFOMs)

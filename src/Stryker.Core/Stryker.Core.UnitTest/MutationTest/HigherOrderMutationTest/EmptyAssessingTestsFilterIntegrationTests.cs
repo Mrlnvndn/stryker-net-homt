@@ -77,8 +77,8 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
 
             // Verify that mutants 4 and 5 which have overlapping tests could potentially form a valid HOM
             var validPairExists = homResults.Any(hom => 
-                hom.ConstituentMutants.Any(c => c.Id == 4 || IsOriginalFomId(hom, 4)) &&
-                hom.ConstituentMutants.Any(c => c.Id == 5 || IsOriginalFomId(hom, 5)));
+                hom.ConstituentMutants.Any(c => c.Id == 4 ) &&
+                hom.ConstituentMutants.Any(c => c.Id == 5 ));
 
             if (homResults.Any())
             {
@@ -197,14 +197,6 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
             mutantMock.Setup(m => m.KillingTests).Returns(TestIdentifierList.NoTest());
 
             return mutantMock.Object;
-        }
-
-        /// <summary>
-        /// Checks if a HOM has a constituent with the given original FOM ID
-        /// </summary>
-        private bool IsOriginalFomId(HigherOrderMutant hom, int originalFomId)
-        {
-            return hom.GetOriginalConstituentMutantIdsForActivation().Contains(originalFomId);
         }
     }
 }

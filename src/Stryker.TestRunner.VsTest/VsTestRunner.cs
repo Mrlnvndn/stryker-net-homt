@@ -150,10 +150,7 @@ public sealed class VsTestRunner : IDisposable
     }
 
     private ICollection<string> TestCases(IReadOnlyList<IMutant> mutants, Dictionary<int, ITestIdentifiers> mutantTestsMap)
-    {
-        var homToFomMapping = new Dictionary<int, List<int>>();
-        var fomToHomMapping = new Dictionary<int, List<int>>();
-        
+    {        
         ICollection<string> testCases;
         // if we optimize the number of tests to run
         if (_context.Options.OptimizationMode.HasFlag(OptimizationModes.CoverageBasedTest))
@@ -166,7 +163,7 @@ public sealed class VsTestRunner : IDisposable
                 
                 if (mutant.GetType().Name == "HigherOrderMutant")
                 {
-                    ProcessHigherOrderMutant(mutant, tests, mutantTestsMap, homToFomMapping, fomToHomMapping);
+                    ProcessHigherOrderMutant(mutant, tests, mutantTestsMap);
                 }
                 else
                 {
@@ -192,7 +189,7 @@ public sealed class VsTestRunner : IDisposable
             var mutant = mutants[0];
             if (mutant.GetType().Name == "HigherOrderMutant")
             {
-                ProcessHigherOrderMutant(mutant, TestIdentifierList.EveryTest(), mutantTestsMap, homToFomMapping, fomToHomMapping);
+                ProcessHigherOrderMutant(mutant, TestIdentifierList.EveryTest(), mutantTestsMap);
             }
             else
             {
@@ -205,9 +202,6 @@ public sealed class VsTestRunner : IDisposable
             testCases = null;
         }
 
-        // Store mappings in context for XML generation
-        _context.SetHomMappings(homToFomMapping, fomToHomMapping);
-
         return testCases;
     }
 
@@ -217,12 +211,8 @@ public sealed class VsTestRunner : IDisposable
     /// <param name="mutant">The Higher-Order Mutant to process</param>
     /// <param name="tests">The test identifiers to associate with this mutant</param>
     /// <param name="mutantTestsMap">The mapping of mutant IDs to their test identifiers</param>
-    /// <param name="homToFomMapping">Mapping from HOM IDs to their constituent FOM IDs</param>
-    /// <param name="fomToHomMapping">Mapping from FOM IDs to the HOMs they belong to</param>
     private void ProcessHigherOrderMutant(IMutant mutant, ITestIdentifiers tests, 
-        Dictionary<int, ITestIdentifiers> mutantTestsMap,
-        Dictionary<int, List<int>> homToFomMapping, 
-        Dictionary<int, List<int>> fomToHomMapping)
+        Dictionary<int, ITestIdentifiers> mutantTestsMap)
     {
         // Add HOM for status tracking - use TryAdd for safety
         if (!mutantTestsMap.TryAdd(mutant.Id, tests))
@@ -231,17 +221,14 @@ public sealed class VsTestRunner : IDisposable
         }
 
         var constituentMutantsProperty = mutant.GetType().GetProperty("ConstituentMutants");
-        var getOriginalIdsMethod = mutant.GetType().GetMethod("GetOriginalConstituentMutantIdsForActivation");
 
-        if (TryProcessWithOriginalIds(mutant, tests, mutantTestsMap, homToFomMapping, fomToHomMapping, 
-            constituentMutantsProperty, getOriginalIdsMethod))
+        if (TryProcessWithOriginalIds(mutant, tests, mutantTestsMap, constituentMutantsProperty))
         {
             return;
         }
 
         // Fallback if reflection fails or GetOriginalFomIdsForActivation method is not available
-        ProcessWithFallbackApproach(mutant, tests, mutantTestsMap, homToFomMapping, fomToHomMapping, 
-            constituentMutantsProperty);
+        ProcessWithFallbackApproach(mutant, tests, mutantTestsMap, constituentMutantsProperty);
     }
 
     /// <summary>
@@ -250,37 +237,22 @@ public sealed class VsTestRunner : IDisposable
     /// <returns>True if processing was successful, false if fallback is needed</returns>
     private bool TryProcessWithOriginalIds(IMutant mutant, ITestIdentifiers tests,
         Dictionary<int, ITestIdentifiers> mutantTestsMap,
-        Dictionary<int, List<int>> homToFomMapping,
-        Dictionary<int, List<int>> fomToHomMapping,
-        PropertyInfo constituentMutantsProperty,
-        MethodInfo getOriginalIdsMethod)
+        PropertyInfo constituentMutantsProperty)
     {
-        if (constituentMutantsProperty?.GetValue(mutant) is not IEnumerable<IMutant> constituentMutants ||
-            getOriginalIdsMethod?.Invoke(mutant, null) is not List<int> originalFomIds)
+        if (constituentMutantsProperty?.GetValue(mutant) is not IEnumerable<IMutant> constituentMutants)
         {
-            _logger.LogWarning("Could not retrieve constituent mutants or original FOM IDs for HOM {Id}", mutant.Id);
+            _logger.LogWarning("Could not retrieve constituent mutants for HOM {Id}", mutant.Id);
             return false;
         }
 
-        var constituentsList = constituentMutants.ToList();
 
-        // Sanity check: ensure we have original IDs for all constituents and they are in the right order
-        if (constituentsList.Count != originalFomIds.Count)
+        // Add each constituent FOM
+        foreach (var constituentMutant in constituentMutants)
         {
-            _logger.LogWarning("Mismatch in count of constituent mutants and original FOM IDs for HOM {Id}, using fallback approach", mutant.Id);
-            return false;
+            ProcessConstituentFom(constituentMutant, mutant, tests, mutantTestsMap);
+            
         }
 
-        // Add each constituent FOM using ORIGINAL FOM IDs for activation
-        for (var i = 0; i < constituentsList.Count && i < originalFomIds.Count; i++)
-        {
-            var originalFomId = originalFomIds[i];
-            var constituentMutant = constituentsList[i];
-
-            ProcessConstituentFom(originalFomId, constituentMutant, mutant, tests, mutantTestsMap, fomToHomMapping);
-        }
-        
-        homToFomMapping[mutant.Id] = originalFomIds;
         return true;
     }
 
@@ -289,8 +261,6 @@ public sealed class VsTestRunner : IDisposable
     /// </summary>
     private void ProcessWithFallbackApproach(IMutant mutant, ITestIdentifiers tests,
         Dictionary<int, ITestIdentifiers> mutantTestsMap,
-        Dictionary<int, List<int>> homToFomMapping,
-        Dictionary<int, List<int>> fomToHomMapping,
         PropertyInfo constituentMutantsProperty)
     {
         _logger.LogWarning("Failed to extract original FOM IDs from HOM {Id}, using fallback approach", mutant.Id);
@@ -304,41 +274,33 @@ public sealed class VsTestRunner : IDisposable
         
         foreach (var constituentMutant in fallbackConstituents)
         {
-            ProcessConstituentFomFallback(constituentMutant, mutant, tests, mutantTestsMap, fomIds, fomToHomMapping);
-        }
-        
-        homToFomMapping[mutant.Id] = fomIds;
+            ProcessConstituentFomFallback(constituentMutant, mutant, tests, mutantTestsMap, fomIds);
+        }        
     }
 
     /// <summary>
     /// Processes a constituent FOM using its original ID for activation.
     /// </summary>
-    private void ProcessConstituentFom(int originalFomId, IMutant constituentMutant, IMutant homMutant,
-        ITestIdentifiers tests, Dictionary<int, ITestIdentifiers> mutantTestsMap, Dictionary<int, List<int>> fomToHomMapping)
+    private void ProcessConstituentFom(IMutant constituentMutant, IMutant homMutant,
+        ITestIdentifiers tests, Dictionary<int, ITestIdentifiers> mutantTestsMap)
     {
-        // Add FOM with ORIGINAL ID for MutantControl activation
-        if (mutantTestsMap.TryGetValue(originalFomId, out var existingTests))
+        var constituentMutantId = constituentMutant.Id;
+
+        // Add constituent mutant for MutantControl activation
+        if (mutantTestsMap.TryGetValue(constituentMutantId, out var existingTests))
         {
             // Merge the existing tests with the new tests
             var mergedTests = existingTests.Merge(tests);
-            mutantTestsMap[originalFomId] = mergedTests;
+            mutantTestsMap[constituentMutantId] = mergedTests;
             _logger.LogDebug("Original FOM {OriginalFOMId} (constituent copy {CopyId}) already in mutant test map (shared between HOMs), merging test sets", 
-                originalFomId, constituentMutant.Id);
+                constituentMutantId, constituentMutant.Id);
         }
         else
         {
-            mutantTestsMap[originalFomId] = tests;
+            mutantTestsMap[constituentMutantId] = tests;
             _logger.LogDebug("Added original FOM {OriginalFOMId} (constituent copy {CopyId}) from HOM {HOMId} for activation", 
-                originalFomId, constituentMutant.Id, homMutant.Id);
+                constituentMutantId, constituentMutant.Id, homMutant.Id);
         }
-        
-        // Support FOM to multiple HOMs mapping using ORIGINAL IDs
-        if (!fomToHomMapping.TryGetValue(originalFomId, out var homList))
-        {
-            homList = new List<int>();
-            fomToHomMapping[originalFomId] = homList;
-        }
-        homList.Add(homMutant.Id);
     }
 
     /// <summary>
@@ -346,7 +308,7 @@ public sealed class VsTestRunner : IDisposable
     /// </summary>
     private void ProcessConstituentFomFallback(IMutant constituentMutant, IMutant homMutant,
         ITestIdentifiers tests, Dictionary<int, ITestIdentifiers> mutantTestsMap,
-        List<int> fomIds, Dictionary<int, List<int>> fomToHomMapping)
+        List<int> fomIds)
     {
         // Use constituent ID as fallback
         if (mutantTestsMap.TryGetValue(constituentMutant.Id, out var existingTests))
@@ -360,14 +322,8 @@ public sealed class VsTestRunner : IDisposable
             mutantTestsMap[constituentMutant.Id] = tests;
         }
 
-        fomIds.Add(constituentMutant.Id);
+        fomIds.Add(constituentMutant.Id);    
         
-        if (!fomToHomMapping.TryGetValue(constituentMutant.Id, out var homList))
-        {
-            homList = new List<int>();
-            fomToHomMapping[constituentMutant.Id] = homList;
-        }
-        homList.Add(homMutant.Id);
     }
 
     private TestRunResult BuildTestRunResult(IRunResults testResults, int expectedTests, int totalCountOfTests,

@@ -32,12 +32,6 @@ public sealed class VsTestContextInformation : IDisposable
     private TestFrameworks _testFramework;
 
     /// <summary>
-    /// HOM to FOM mappings for dual-mode XML generation
-    /// </summary>
-    private Dictionary<int, List<int>> _homToFomMapping = [];
-    private Dictionary<int, List<int>> _fomToHomMapping = [];
-
-    /// <summary>
     /// Discovered tests (VsTest format)
     /// </summary>
     public IDictionary<Guid, VsTestDescription> VsTests { get; private set; }
@@ -300,9 +294,7 @@ public sealed class VsTestContextInformation : IDisposable
                 forCoverage,
                 mutantTestsMap?.Select(e => (e.Key, e.Value.GetIdentifiers().Select(x => Guid.Parse(x)))),
                 helperNameSpace,
-                isHomt,
-                _homToFomMapping,
-                _fomToHomMapping)
+                isHomt)
             : string.Empty;
         if (_testFramework.HasFlag(TestFrameworks.NUnit))
         {
@@ -328,16 +320,5 @@ public sealed class VsTestContextInformation : IDisposable
 </RunSettings>";
 
         return runSettings;
-    }
-
-    /// <summary>
-    /// Sets HOM mappings for dual-mode XML generation
-    /// </summary>
-    /// <param name="homToFom">HOM ID to FOM IDs mapping</param>
-    /// <param name="fomToHom">FOM ID to HOM IDs mapping (supporting multiple HOMs per FOM)</param>
-    public void SetHomMappings(Dictionary<int, List<int>> homToFom, Dictionary<int, List<int>> fomToHom)
-    {
-        _homToFomMapping = homToFom ?? [];
-        _fomToHomMapping = fomToHom ?? [];
     }
 }

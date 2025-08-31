@@ -362,9 +362,15 @@ public class MutationTestProcess : IMutationTestProcess
         var higherOrderMutation = new HigherOrderMutation(_options, Input, mutantsToTest);
 
         // Add Algorithm to HigherOrderMutation instance
-        var localSearchAlgorithm = new LocalSearchAlgorithm(Input, [],_options, mutantsToTest);
-        higherOrderMutation.AddSearchAlgorithm(localSearchAlgorithm);
-        Logger.LogDebug("HOMT: Registered LocalSearchAlgorithm for HOM generation");
+        //var localSearchAlgorithm = new LocalSearchAlgorithm(Input, [],_options, mutantsToTest);
+        //higherOrderMutation.AddSearchAlgorithm(localSearchAlgorithm);
+        //Logger.LogDebug("HOMT: Registered LocalSearchAlgorithm for HOM generation");
+
+        //var geneticAlgorithm = new GeneticSearchAlgorithm(Input, null, _options, mutantsToTest, true);
+        //higherOrderMutation.AddSearchAlgorithm(geneticAlgorithm);
+
+        var localSearchAlgorithmV2 = new LocalSearchAlgorithmV2(Input, null, _options, mutantsToTest);
+        higherOrderMutation.AddSearchAlgorithm(localSearchAlgorithmV2); 
 
         Input.HigherOrderMutation = higherOrderMutation;
 

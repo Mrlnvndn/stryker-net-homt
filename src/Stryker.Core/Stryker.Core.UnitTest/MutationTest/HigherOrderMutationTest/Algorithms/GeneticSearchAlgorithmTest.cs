@@ -33,7 +33,6 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
             // Set up mocks
             _optionsMock = new Mock<IStrykerOptions>();
             _inputMock = new Mock<MutationTestInput>();
-            _executorMock = new Mock<IMutantExecutor>();
             _heuristicMock = new Mock<IHOMHeuristic>();
             
             // Create test mutants (FOMs)
@@ -53,8 +52,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
                 _inputMock.Object,
                 _heuristicMock.Object,
                 _optionsMock.Object,
-                _testMutants,
-                _executorMock.Object);
+                _testMutants);
         }
         
         [TestMethod]
@@ -153,8 +151,11 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
         private IMutant CreateMockMutant(int id)
         {
             // Create mock test identifiers
-            var testIdentifiers = CreateMockTestIdentifiers(new[] { $"Test{id}", $"Test{id+1}" });
-            
+            var killingTestsTestIdentifiers = CreateMockTestIdentifiers(new[] { $"Test{id}", $"Test{id+1}" });
+
+            var assessingTestsTestIdentifiers = CreateMockTestIdentifiers(new[] { $"Test{id}", $"Test{id + 1}", $"Test{id + 2}", $"Test{id + 3}" });
+
+
             // Create a mock for the mutation
             var mutation = CreateMockMutation($"File{id % 3 + 1}.cs");
             
@@ -162,7 +163,8 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
             var mutant = new Mock<IMutant>();
             mutant.Setup(m => m.Id).Returns(id);
             mutant.Setup(m => m.Mutation).Returns(mutation);
-            mutant.Setup(m => m.KillingTests).Returns(testIdentifiers);
+            mutant.Setup(m => m.KillingTests).Returns(killingTestsTestIdentifiers);
+            mutant.Setup(m => m.AssessingTests).Returns(assessingTestsTestIdentifiers);
             
             return mutant.Object;
         }

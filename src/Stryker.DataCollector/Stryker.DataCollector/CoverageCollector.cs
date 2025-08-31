@@ -63,8 +63,7 @@ namespace Stryker.DataCollector
 
         public static string GetVsTestSettings(bool needCoverage,
             IEnumerable<(int mutant, IEnumerable<Guid> coveringTests)> mutantTestsMap,
-            string helperNameSpace, bool isHomt = false, Dictionary<int, List<int>> homToFomMapping = null,
-            Dictionary<int, List<int>> fomToHomMapping = null)
+            string helperNameSpace, bool isHomt = false)
         {
             var codeBase = typeof(CoverageCollector).GetTypeInfo().Assembly.Location;
             var qualifiedName = typeof(CoverageCollector).AssemblyQualifiedName;
@@ -89,34 +88,10 @@ namespace Stryker.DataCollector
             }
             if (mutantTestsMap != null)
             {
-                // Enhanced XML generation with HOM/FOM relationship metadata
                 foreach (var (mutant, coveringTests) in mutantTestsMap)
                 {
-                    var testGuids = coveringTests == null ? "" : string.Join(",", coveringTests);
-                    
-                    // Check if this is a HOM with constituent FOMs
-                    if (homToFomMapping?.ContainsKey(mutant) == true)
-                    {
-                        // This is a HOM - add with metadata
-                        configuration.AppendFormat("<Mutant id='{0}' tests='{1}' type='hom' constituents='{2}'/>", 
-                            mutant, testGuids, string.Join(",", homToFomMapping[mutant]));
-                    }
-                    else
-                    {
-                        // Check if this is a FOM that belongs to one or more HOMs
-                        if (fomToHomMapping?.ContainsKey(mutant) == true)
-                        {
-                            // This is a constituent FOM - could belong to multiple HOMs
-                            configuration.AppendFormat("<Mutant id='{0}' tests='{1}' type='fom' parents='{2}'/>", 
-                                mutant, testGuids, string.Join(",", fomToHomMapping[mutant]));
-                        }
-                        else
-                        {
-                            // This is a regular FOM
-                            configuration.AppendFormat("<Mutant id='{0}' tests='{1}' type='fom'/>", 
-                                mutant, testGuids);
-                        }
-                    }
+                    configuration.AppendFormat("<Mutant id='{0}' tests='{1}'/>", mutant,
+                        coveringTests == null ? "" : string.Join(",", coveringTests));
                 }
             }
 

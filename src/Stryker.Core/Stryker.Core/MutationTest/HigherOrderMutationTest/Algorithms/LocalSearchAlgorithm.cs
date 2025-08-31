@@ -78,7 +78,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             _random = new Random();
 
             // Initialize heuristic registry with all available heuristics but without default heuristics
-            _heuristicRegistry = new HeuristicRegistry(availableMutants, options, mutationTestInput, registerDefaultHeuristics: false);
+            _heuristicRegistry = new HeuristicRegistry(availableMutants, options, mutationTestInput, registerAllHeuristics: false);
             
             // Register default heuristics with the correct max order limit
             _heuristicRegistry.RegisterHeuristic(new MaxSizeLimitHeuristic(maxOrder));

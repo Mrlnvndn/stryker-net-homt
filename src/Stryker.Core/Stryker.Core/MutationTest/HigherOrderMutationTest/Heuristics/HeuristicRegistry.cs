@@ -23,19 +23,21 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// <param name="availableFOMs">The available first-order mutants.</param>
         /// <param name="options">The stryker options.</param>
         /// <param name="mutationTestInput">The mutation test input.</param>
-        /// <param name="registerDefaultHeuristics">Whether to register the default heuristics.</param>
-        public HeuristicRegistry(IReadOnlyCollection<IMutant> availableFOMs, IStrykerOptions options, MutationTestInput mutationTestInput, bool registerDefaultHeuristics = true)
+        /// <param name="registerAllHeuristics">Whether to register the default heuristics.</param>
+        public HeuristicRegistry(IReadOnlyCollection<IMutant> availableFOMs, IStrykerOptions options, MutationTestInput mutationTestInput, bool registerAllHeuristics = true)
         {
             // Register default heuristics with default weights
-            if (registerDefaultHeuristics)
+            if (registerAllHeuristics)
             {
-                RegisterDefaultHeuristics();
+                RegisterAllHeuristics();
             }
-
-            // Initialize all registered heuristics
-            foreach (var heuristic in _registeredHeuristics)
+            else
             {
-                heuristic.Initialize(availableFOMs, options, mutationTestInput);
+                // Initialize all registered heuristics
+                foreach (var heuristic in _registeredHeuristics)
+                {
+                    heuristic.Initialize(availableFOMs, options, mutationTestInput);
+                }
             }
         }
 
@@ -126,17 +128,18 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// <summary>
         /// Registers the default set of heuristics.
         /// </summary>
-        private void RegisterDefaultHeuristics()
+        private void RegisterAllHeuristics()
         {
-            RegisterHeuristic(new MaxSizeLimitHeuristic());
             RegisterHeuristic(new CodeLocationHeuristic());
-            RegisterHeuristic(new HardToKillHeuristic());
-            RegisterHeuristic(new MutatorTypeHeuristic());
             RegisterHeuristic(new DependencyHeuristic());
-            RegisterHeuristic(new SSHOMExpanderHeuristic());
-            RegisterHeuristic(new WeakMutatorFilterHeuristic());
-            RegisterHeuristic(new SyntaxNodeConflictHeuristic());
             RegisterHeuristic(new EmptyAssessingTestsFilterHeuristic());
+            RegisterHeuristic(new HardToKillHeuristic());
+            RegisterHeuristic(new MaxSizeLimitHeuristic());
+            RegisterHeuristic(new MutatorTypeHeuristic());
+            RegisterHeuristic(new OverlappingTestsHeuristic());
+            RegisterHeuristic(new SSHOMExpanderHeuristic());
+            RegisterHeuristic(new SyntaxNodeConflictHeuristic());
+            RegisterHeuristic(new WeakMutatorFilterHeuristic());
         }
     }
 }

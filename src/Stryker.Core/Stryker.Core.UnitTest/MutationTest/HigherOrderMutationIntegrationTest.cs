@@ -212,6 +212,9 @@ namespace TestProject
             var options = CreateStrykerOptionsWithHOMT();
             var mutants = GenerateActualMutants(syntaxTrees, compilation, options);
 
+            // Assign covering tests to mutants so they have test coverage
+            AssignCoveringTestsToMutants(mutants);
+
             performanceMetrics.MutantGenerationTime = stopwatch.Elapsed;
             performanceMetrics.TotalMutantsGenerated = mutants.Count;
             stopwatch.Restart();
@@ -226,7 +229,6 @@ namespace TestProject
             var algorithm = new LocalSearchAlgorithm(input, null, options, mutants);
 
             higherOrderMutation.AddSearchAlgorithm(algorithm);
-
 
             // Use the actual centralized method from MutationTestProcess
             var result = higherOrderMutation.BuildAndOptimizeHigherOrderMutants(
@@ -267,6 +269,9 @@ namespace TestProject
             var options = CreateStrykerOptionsWithHOMT();
             var mutants = GenerateActualMutants(syntaxTrees, compilation, options);
             var input = CreateRealMutationTestInput(syntaxTrees, compilation);
+
+            // Assign covering tests to mutants so they have test coverage
+            AssignCoveringTestsToMutants(mutants);
 
             // Create HigherOrderMutation instance directly
             var higherOrderMutation = new HigherOrderMutation(options, input, mutants);
@@ -386,8 +391,15 @@ namespace TestProject
             for (int i = 1; i <= count; i++)
             {
                 var killingTests = testNames.Take((i % testNames.Length) + 1).ToArray();
+                var coveringTests = testNames.Take(Math.Min(3, (i % testNames.Length) + 2)).ToArray();
                 var file = files[i % files.Length];
-                mutants.Add(TestHelper.CreateMutant(file, i, MutantStatus.Pending, killingTests));
+                var mutant = TestHelper.CreateMutant(file, i, MutantStatus.Pending, killingTests);
+                
+                // Assign covering and assessing tests to ensure HOMs can be created
+                mutant.CoveringTests = new TestIdentifierList(coveringTests);
+                mutant.AssessingTests = new TestIdentifierList(coveringTests);
+                
+                mutants.Add(mutant);
             }
 
             return mutants;
@@ -494,11 +506,15 @@ namespace TestProject
                 hom.Order.ShouldBeGreaterThanOrEqualTo(2, "All HOMs should be order 2 or higher");
                 hom.ConstituentMutants.ShouldNotBeEmpty("HOMs should have constituent mutants");
                 hom.ConstituentMutants.Count.ShouldBe(hom.Order, "HOM order should match constituent count");
-                
+                hom.AssessingTests.ShouldNotBeNull("HOM should have assessing tests calculated, and these should not be null");
+                hom.AssessingTests.IsEmpty.ShouldBeFalse("HOM should have non-empty assessing tests to avoid filtering");
+
                 // Validate that all constituent mutants are from the original set
                 foreach (var constituent in hom.ConstituentMutants)
                 {
                     originalMutants.ShouldContain(constituent, "All constituent mutants should be from original set");
+                    constituent.AssessingTests.ShouldNotBeNull("Constituent mutants should have assessing tests");
+                    constituent.AssessingTests.IsEmpty.ShouldBeFalse("Constituent mutants should have non-empty assessing tests");
                 }
             }
 
@@ -549,6 +565,64 @@ namespace TestProject
             Console.WriteLine($"Algorithm Used: {result.AlgorithmUsed}");
             Console.WriteLine($"Heuristics Count: {result.HeuristicsUsed}");
             Console.WriteLine("========================================================");
+        }
+
+        private void AssignCoveringTestsToMutants(List<IMutant> mutants)
+        {
+            // Create realistic test names that would cover these mutants
+            var availableTests = new[]
+            {
+                "Calculator.AddTest",
+                "Calculator.SubtractTest", 
+                "Calculator.MultiplyTest",
+                "Calculator.DivideTest",
+                "Calculator.IsPositiveTest",
+                "Calculator.IsEvenTest",
+                "Calculator.GetGradeTest",
+                "MathHelper.SquareTest",
+                "MathHelper.CubeTest",
+                "MathHelper.IsPrimeTest",
+                "MathHelper.FactorialTest",
+                "StringUtils.ReverseTest",
+                "StringUtils.IsPalindromeTest",
+                "StringUtils.CapitalizeTest"
+            };
+
+            var testIdentifierList = new TestIdentifierList(availableTests);
+            var random = new Random(42); // Use seed for deterministic results
+
+            // Assign covering tests to each mutant based on the file they're in
+            foreach (var mutant in mutants)
+            {
+                var fileName = mutant.Mutation.OriginalNode.SyntaxTree.FilePath;
+                var relevantTests = availableTests.Where(test => 
+                {
+                    if (fileName.Contains("Calculator.cs"))
+                        return test.StartsWith("Calculator.");
+                    if (fileName.Contains("MathHelper.cs"))
+                        return test.StartsWith("MathHelper.");
+                    if (fileName.Contains("StringUtils.cs"))
+                        return test.StartsWith("StringUtils.");
+                    return false;
+                }).ToArray();
+
+                if (relevantTests.Length > 0)
+                {
+                    // Assign 1-3 relevant tests to each mutant
+                    var testCount = random.Next(1, Math.Min(4, relevantTests.Length + 1));
+                    var selectedTests = relevantTests.OrderBy(x => random.Next()).Take(testCount).ToArray();
+                    
+                    mutant.CoveringTests = new TestIdentifierList(selectedTests);
+                    mutant.AssessingTests = new TestIdentifierList(selectedTests);
+                }
+                else
+                {
+                    // Fallback: assign some tests anyway to prevent empty assessing tests
+                    var fallbackTests = availableTests.OrderBy(x => random.Next()).Take(2).ToArray();
+                    mutant.CoveringTests = new TestIdentifierList(fallbackTests);
+                    mutant.AssessingTests = new TestIdentifierList(fallbackTests);
+                }
+            }
         }
 
         #endregion
