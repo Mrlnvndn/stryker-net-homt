@@ -108,7 +108,7 @@ public class OverlappingTestsHeuristicTests : TestBase
         var score = _sut.ScoreCandidate(candidate);
 
         // Assert
-        score.ShouldBe(0.6, 0.01); // Perfect overlap (Jaccard = 1.0) with reasonable size weight (0.6)
+        score.ShouldBe(0.6); // Perfect overlap (Jaccard = 1.0) with reasonable size weight (0.6)
     }
 
     [TestMethod]
@@ -143,7 +143,7 @@ public class OverlappingTestsHeuristicTests : TestBase
         // Jaccard similarity: 2/4 = 0.5
         // Size weight for 2 tests: 0.6
         // Expected score: 0.5 * 0.6 = 0.3
-        score.ShouldBe(0.3, 0.01);
+        score.ShouldBe(0.3);
     }
 
     [TestMethod]
@@ -163,7 +163,7 @@ public class OverlappingTestsHeuristicTests : TestBase
         // Jaccard similarity: 1/3 ≈ 0.333
         // Size weight for 1 test: 0.3
         // Expected score: 0.333 * 0.3 ≈ 0.1
-        score.ShouldBe(0.1, 0.01);
+        score.ShouldBe(0.1);
     }
 
     [TestMethod]
@@ -187,7 +187,7 @@ public class OverlappingTestsHeuristicTests : TestBase
         // Jaccard similarity: 15/19 ≈ 0.789
         // Size weight for 15 tests: 1.0 (maximum)
         // Expected score: 0.789 * 1.0 ≈ 0.789
-        score.ShouldBe(0.789, 0.01);
+        score.ShouldBe(0.789);
     }
 
     [TestMethod]
@@ -208,7 +208,7 @@ public class OverlappingTestsHeuristicTests : TestBase
         // Jaccard similarity: 1/6 ≈ 0.167
         // Size weight for 1 test: 0.3
         // Expected score: 0.167 * 0.3 ≈ 0.05
-        score.ShouldBe(0.05, 0.01);
+        score.ShouldBe(0.05);
     }
 
     [TestMethod]
@@ -229,7 +229,7 @@ public class OverlappingTestsHeuristicTests : TestBase
         // Jaccard similarity: 1/7 ≈ 0.143
         // Size weight for 1 test: 0.3
         // Expected score: 0.143 * 0.3 ≈ 0.043
-        score.ShouldBe(0.043, 0.01);
+        score.ShouldBe(0.043);
     }
 
     #endregion

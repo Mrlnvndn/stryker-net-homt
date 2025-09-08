@@ -11,10 +11,9 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.SSHOM;
 /// </summary>
 public class SSHOMAnalysisResult
 {
-    public SSHOMAnalysisResult(int sshomCount, int analyzedCount, int totalCandidates, TimeSpan analysisTime)
+    public SSHOMAnalysisResult(int sshomCount, int totalCandidates, TimeSpan analysisTime)
     {
         SSHOMCount = sshomCount;
-        AnalyzedCount = analyzedCount;
         TotalCandidates = totalCandidates;
         AnalysisTime = analysisTime;
     }

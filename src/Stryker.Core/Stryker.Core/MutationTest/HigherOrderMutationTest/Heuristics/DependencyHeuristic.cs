@@ -7,7 +7,7 @@ using System.IO;
 namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
 {
     /// <summary>
-    /// A heuristic that favors FOMs with high mutual dependency (CDPA - Code Dependency Path Analysis).
+    /// A heuristic that favors FOMs with high mutual dependency (CPDA - Causal Program Dependence Analysis).
     /// Research suggests that mutants with high coupling are more likely to form SSHOMs.
     /// This is primarily a FITNESS SCORING heuristic.
     /// </summary>

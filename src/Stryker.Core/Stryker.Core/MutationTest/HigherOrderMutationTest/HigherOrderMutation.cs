@@ -108,9 +108,6 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
                 }
             }
 
-            _logger.LogInformation("Validated {ValidatedCount} SSHOMs out of {TestedCount} tested HOM candidates",
-                validatedCount, testedCandidates.Count);
-
             return validatedCount;
         }
 
@@ -441,17 +438,15 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
             _logger.LogDebug("Starting SSHOM analysis...");
             
             var testedCandidates = TestedCandidates.ToList();
-            var sshomCount = 0;
-            var analyzedCount = 0;
 
-            sshomCount = ValidateAllTestedCandidatesAsSSHOMs(requireProperSubset);
+            var sshomCount = ValidateAllTestedCandidatesAsSSHOMs(requireProperSubset);
 
             var analysisTime = DateTime.Now - startTime;
             
-            _logger.LogInformation("SSHOM Analysis Complete: {SSHOMCount} SSHOMs found out of {AnalyzedCount} tested candidates in {AnalysisTime}ms", 
-                sshomCount, analyzedCount, analysisTime.TotalMilliseconds);
+            _logger.LogInformation("SSHOM Analysis Complete: {SSHOMCount} SSHOMs found out of {TestedCandidates} tested candidates in {AnalysisTime}ms", 
+                sshomCount, testedCandidates.Count, analysisTime.TotalMilliseconds);
 
-            return new SSHOMAnalysisResult(sshomCount, analyzedCount, testedCandidates.Count, analysisTime);
+            return new SSHOMAnalysisResult(sshomCount, testedCandidates.Count, analysisTime);
         }
 
         /// <summary>

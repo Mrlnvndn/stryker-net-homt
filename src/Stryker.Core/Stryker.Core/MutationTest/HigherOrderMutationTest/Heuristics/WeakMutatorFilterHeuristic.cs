@@ -13,17 +13,12 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
     public class WeakMutatorFilterHeuristic : BaseHOMHeuristic
     {
         /// <summary>
-        /// Cache of mutant type effectiveness scores
+        /// Stores MSI (Mutation Score Indicator) and statistics for each mutator type
         /// </summary>
-        private readonly Dictionary<string, double> _mutatorStrengthScores = new();
+        private readonly Dictionary<Mutator, MutatorStatistics> _mutatorStatistics = new();
         
         /// <summary>
-        /// Cache of mutant scores
-        /// </summary>
-        private readonly Dictionary<int, double> _mutantScores = new();
-        
-        /// <summary>
-        /// Threshold below which a mutant should be filtered out
+        /// Threshold below which a mutant should be filtered out based on MSI
         /// </summary>
         private readonly double _filterThreshold;
 
@@ -32,28 +27,29 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         public override bool IsFilteringHeuristic => true;
 
         public override bool IsFitnessScoringHeuristic => true;
-        
+
+        public override bool RequiresPreRun => true;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="WeakMutatorFilterHeuristic"/> class with default threshold.
         /// </summary>
-        /// <param name="filterThreshold">Score threshold below which FOMs should be filtered out (0.0-1.0).</param>
-        public WeakMutatorFilterHeuristic(double filterThreshold = 0.3)
+        /// <param name="filterThreshold">MSI threshold below which FOMs should be filtered out (0.0-100.0).</param>
+        public WeakMutatorFilterHeuristic(double filterThreshold = 30.0)
         {
-            _filterThreshold = NormalizeScore(filterThreshold);
+            _filterThreshold = filterThreshold;
         }
 
         protected override void OnInitialized()
         {
-            _mutatorStrengthScores.Clear();
-            _mutantScores.Clear();
+            _mutatorStatistics.Clear();
             
             // Group mutants by mutation type
-            var mutantsByType = new Dictionary<string, List<IMutant>>();
+            var mutantsByType = new Dictionary<Mutator, List<IMutant>>();
             
             foreach (var mutant in AvailableFOMs)
             {
-                var mutationType = GetMutationType(mutant);
-                
+                var mutationType = mutant.Mutation.Type;
+
                 if (!mutantsByType.TryGetValue(mutationType, out var mutantsOfType))
                 {
                     mutantsOfType = new List<IMutant>();
@@ -63,9 +59,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
                 mutantsOfType.Add(mutant);
             }
             
-            // Calculate average killing test count for each mutation type
-            var typeToAvgKillingTests = new Dictionary<string, double>();
-            
+            // Calculate MSI for each mutation type
             foreach (var typeEntry in mutantsByType)
             {
                 var mutationType = typeEntry.Key;
@@ -76,65 +70,18 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
                     continue;
                 }
                 
-                double totalTestCount = 0;
-                int validMutants = 0;
+                var totalMutants = mutantsOfType.Count;
+                var killedMutants = mutantsOfType.Count(mutant => mutant.ResultStatus == MutantStatus.Killed);
                 
-                foreach (var mutant in mutantsOfType)
-                {
-                    int killingTestCount = CountKillingTests(mutant);
-                    if (killingTestCount > 0)
-                    {
-                        totalTestCount += killingTestCount;
-                        validMutants++;
-                    }
-                }
+                // MSI = 100 * (D / N) where D is killed mutants and N is total mutants
+                var msi = totalMutants > 0 ? 100.0 * killedMutants / totalMutants : 0.0;
                 
-                if (validMutants > 0)
+                _mutatorStatistics[mutationType] = new MutatorStatistics
                 {
-                    typeToAvgKillingTests[mutationType] = totalTestCount / validMutants;
-                }
-            }
-            
-            // Calculate relative strength scores for each mutation type
-            // Types with fewer killing tests on average are considered stronger
-            if (typeToAvgKillingTests.Count > 0)
-            {
-                double minAvg = typeToAvgKillingTests.Values.Min();
-                double maxAvg = typeToAvgKillingTests.Values.Max();
-                double range = maxAvg - minAvg;
-                
-                if (range > 0)
-                {
-                    foreach (var entry in typeToAvgKillingTests)
-                    {
-                        // Invert and normalize: lower average test count = stronger mutator = higher score
-                        _mutatorStrengthScores[entry.Key] = 1.0 - ((entry.Value - minAvg) / range);
-                    }
-                }
-                else
-                {
-                    // If all types have the same average, give them neutral scores
-                    foreach (var entry in typeToAvgKillingTests)
-                    {
-                        _mutatorStrengthScores[entry.Key] = 0.5;
-                    }
-                }
-            }
-            
-            // Assign scores to individual mutants based on their type's strength
-            foreach (var mutant in AvailableFOMs)
-            {
-                var mutationType = GetMutationType(mutant);
-                
-                if (_mutatorStrengthScores.TryGetValue(mutationType, out var score))
-                {
-                    _mutantScores[mutant.Id] = score;
-                }
-                else
-                {
-                    // Default to neutral if we couldn't analyze this type
-                    _mutantScores[mutant.Id] = 0.5;
-                }
+                    MSI = msi,
+                    TotalFOMs = totalMutants,
+                    KilledFOMs = killedMutants
+                };
             }
         }
         
@@ -145,14 +92,17 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
                 return 0.0;
             }
             
-            double totalScore = 0;
-            int scoredMutants = 0;
+            var totalScore = 0.0;
+            var scoredMutants = 0;
             
             foreach (var mutant in candidate)
             {
-                if (_mutantScores.TryGetValue(mutant.Id, out double score))
+                var mutationType = mutant.Mutation.Type;
+                
+                if (_mutatorStatistics.TryGetValue(mutationType, out var statistics))
                 {
-                    totalScore += score;
+                    // Score based on MSI (normalized to 0.0-1.0)
+                    totalScore += statistics.MSI / 100.0;
                     scoredMutants++;
                 }
             }
@@ -172,10 +122,13 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
                 return true;
             }
             
-            // Filter out candidates containing mutants below the threshold
+            // Filter out candidates containing mutants with MSI below the threshold
             foreach (var mutant in candidate)
             {
-                if (_mutantScores.TryGetValue(mutant.Id, out double score) && score < _filterThreshold)
+                var mutationType = mutant.Mutation.Type;
+                
+                if (_mutatorStatistics.TryGetValue(mutationType, out var statistics) && 
+                    statistics.MSI < _filterThreshold)
                 {
                     return true;
                 }
@@ -183,35 +136,26 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             
             return false;
         }
-        
-        /// <summary>
-        /// Gets the mutation type of the specified mutant.
-        /// </summary>
-        /// <param name="mutant">The mutant to get the type for.</param>
-        /// <returns>The mutation type as a string.</returns>
-        private static string GetMutationType(IMutant mutant)
-        {
-            // Enums are value types so can't use null conditional operator directly on Type
-            if (mutant?.Mutation == null)
-            {
-                return string.Empty;
-            }
-            return mutant.Mutation.Type.ToString();
-        }
-        
-        /// <summary>
-        /// Counts how many tests kill the given mutant.
-        /// </summary>
-        /// <param name="mutant">The mutant to check.</param>
-        /// <returns>The number of killing tests.</returns>
-        private static int CountKillingTests(IMutant mutant)
-        {
-            if (mutant.KillingTests == null || mutant.KillingTests.IsEmpty)
-            {
-                return 0; // No tests kill this mutant 
-            }
 
-            return mutant.KillingTests.Count;
+        /// <summary>
+        /// Statistics for a specific mutator type
+        /// </summary>
+        private class MutatorStatistics
+        {
+            /// <summary>
+            /// Mutation Score Indicator: 100 * (killed mutants / total mutants)
+            /// </summary>
+            public double MSI { get; set; }
+            
+            /// <summary>
+            /// Total number of FOMs for this mutator type
+            /// </summary>
+            public int TotalFOMs { get; set; }
+            
+            /// <summary>
+            /// Number of killed FOMs for this mutator type
+            /// </summary>
+            public int KilledFOMs { get; set; }
         }
     }
 }

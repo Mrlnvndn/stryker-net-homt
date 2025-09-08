@@ -28,7 +28,9 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         public override double Weight => 2.5;
         
         public override bool IsFitnessScoringHeuristic => true;
-        
+
+        public override bool RequiresPreRun => true; // Needs killing test data
+
         protected override void OnInitialized()
         {
             // Reset statistics

@@ -61,28 +61,20 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             
             return NormalizeScore(totalScore);
         }
-        
-        /// <summary>
-        /// Determines whether the specified mutation type is preferred.
-        /// </summary>
-        /// <param name="mutationType">The mutation type to check.</param>
-        /// <returns>True if the mutation type is preferred, false otherwise.</returns>
-        private bool IsMutationTypePreferred(Mutator mutationType)
-        {
-            return _preferredMutationTypes.Contains(mutationType);
-        }
 
-        static bool IsExpressionRemoval(Mutant m)
+        private static bool IsExpressionRemoval(Mutant m)
         {
             var orig = m.Mutation.OriginalNode;
             var repl = m.Mutation.ReplacementNode;
 
-            bool IsExprStmt(StatementSyntax s) =>
-                s is ExpressionStatementSyntax es &&
+            bool IsExprStmt(StatementSyntax s)
+            {
+                return s is ExpressionStatementSyntax es &&
                 (es.Expression is AssignmentExpressionSyntax
                  || es.Expression is InvocationExpressionSyntax
                  || es.Expression is PostfixUnaryExpressionSyntax
                  || es.Expression is PrefixUnaryExpressionSyntax);
+            }
 
             bool IsEmptyReplacement(SyntaxNode? n) =>
                 n is null
@@ -103,15 +95,17 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             return false;
         }
 
-        static bool IsRelationalOrEqualityReplacement(Mutant m)
+        private static bool IsRelationalOrEqualityReplacement(Mutant m)
         {
-            static bool IsRelOrEq(SyntaxKind k) =>
-                k is SyntaxKind.LessThanExpression
+            static bool IsRelOrEq(SyntaxKind k)
+            {
+                return k is SyntaxKind.LessThanExpression
                   or SyntaxKind.LessThanOrEqualExpression
                   or SyntaxKind.GreaterThanExpression
                   or SyntaxKind.GreaterThanOrEqualExpression
                   or SyntaxKind.EqualsExpression
                   or SyntaxKind.NotEqualsExpression;
+            }
 
             if (m.Mutation.OriginalNode is BinaryExpressionSyntax o &&
                 m.Mutation.ReplacementNode is BinaryExpressionSyntax r &&

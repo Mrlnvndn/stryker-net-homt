@@ -68,11 +68,5 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
 
             return false; // Don't filter - candidate has non-empty assessing tests
         }
-
-        public override List<List<IMutant>> SuggestNextCandidates(List<IMutant> currentCandidate, IReadOnlyCollection<IMutant> availableFOMs)
-        {
-            // This heuristic doesn't provide search guidance
-            return [];
-        }
     }
 }
