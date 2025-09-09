@@ -83,6 +83,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
             mutantMock.Setup(m => m.ResultStatus).Returns(status);
             mutantMock.Setup(m => m.Mutation).Returns(mutation);
             mutantMock.Setup(m => m.KillingTests).Returns(testIdentifiers);
+            mutantMock.Setup(m => m.AssessingTests).Returns(testIdentifiers);
 
             return mutantMock.Object;
         }
@@ -356,7 +357,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
             {
                 new HigherOrderMutant(new List<IMutant> { _testMutants[0] }), // Order 1 - should be filtered out
                 new HigherOrderMutant(new List<IMutant> { _testMutants[0], _testMutants[1] }), // Order 2 - should be kept
-                new HigherOrderMutant(new List<IMutant> { _testMutants[0], _testMutants[1], _testMutants[2] }) // Order 3 - should be kept
+                new HigherOrderMutant(new List<IMutant> { _testMutants[0], _testMutants[1], _testMutants[1] }) // Order 3 - should be kept
             };            
 
             algorithmMock.Setup(a => a.GenerateCandidates(
@@ -369,7 +370,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
             _sut.AddSearchAlgorithm(algorithmMock.Object);
 
             // Act
-            var candidates = _sut.CreateCandidateHOMs().ToList();
+            var candidates = _sut.CreateCandidateHOMs(isPreTestRun: true).ToList();
 
             // Assert
             candidates.ShouldNotBeEmpty();
@@ -439,7 +440,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
                 It.IsAny<MutationTestInput>()))
                 .Returns(new List<HigherOrderMutant>
                 {
-                    CreateMockHigherOrderMutant([ _testMutants[2], _testMutants[3]]), // Specific pair 2
+                    CreateMockHigherOrderMutant([ _testMutants[2], _testMutants[3]]), // Specific pair 2 (no overlapping assessing tests)
                 });
 
             _sut.AddSearchAlgorithm(algorithm1.Object);
@@ -452,7 +453,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
 
             // Assert
             candidates1.ShouldNotBeEmpty();
-            candidates2.ShouldNotBeEmpty();
+            candidates2.ShouldBeEmpty();
 
             // Verify different algorithms were called
             algorithm1.Verify(a => a.GenerateCandidates(
@@ -636,7 +637,6 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
                           IStrykerOptions options,
                           MutationTestInput input) =>
                 {
-                    // Wrap each List<IMutant> in a HigherOrderMutant
                     var homs = new List<HigherOrderMutant>
                     {
                         new HigherOrderMutant(new List<IMutant> { _testMutants[0], _testMutants[1] }),
@@ -648,7 +648,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
             return algorithmMock;
         }
 
-        private Mock<IHOMHeuristic> CreateMockHeuristic(string name)
+        private static Mock<IHOMHeuristic> CreateMockHeuristic(string name)
         {
             var heuristicMock = new Mock<IHOMHeuristic>();
             heuristicMock.Setup(h => h.Name).Returns(name);

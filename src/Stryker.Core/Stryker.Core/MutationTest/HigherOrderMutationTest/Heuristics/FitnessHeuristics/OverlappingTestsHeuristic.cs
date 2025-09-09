@@ -6,16 +6,16 @@ using Stryker.Abstractions;
 namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics;
 
 /// <summary>
-/// Heuristic that evaluates HOM candidates based on overlapping covering tests.
+/// Heuristic that evaluates HOM candidates based on overlapping assessing tests.
 /// 
 /// This heuristic is crucial for SSHOM detection because:
 /// 1. SSHOMs are defined by having a proper subset of killing tests compared to their constituents
-/// 2. Higher overlap in covering tests increases the likelihood of shared killing tests
-/// 3. Candidates with good covering test overlap are more likely to become valid SSHOMs
+/// 2. Higher overlap in assessing tests increases the likelihood of shared killing tests
+/// 3. Candidates with good assessing test overlap are more likely to become valid SSHOMs
 /// 
 /// The scoring favors candidates where:
-/// - Constituent mutants have high overlap in their covering tests
-/// - The intersection of covering tests is substantial
+/// - Constituent mutants have high overlap in their assessing tests
+/// - The intersection of assessing tests is substantial
 /// - The potential for SSHOM validation is maximized
 /// </summary>
 public class OverlappingTestsHeuristic : BaseHOMHeuristic
@@ -27,11 +27,11 @@ public class OverlappingTestsHeuristic : BaseHOMHeuristic
     public override bool IsFitnessScoringHeuristic => true;
 
     /// <summary>
-    /// Scores a candidate HOM based on the overlap of covering tests among its constituent mutants.
+    /// Scores a candidate HOM based on the overlap of assessing tests among its constituent mutants.
     /// 
     /// The scoring algorithm:
-    /// 1. Calculates the intersection of covering tests across all constituent mutants
-    /// 2. Calculates the union of covering tests across all constituent mutants  
+    /// 1. Calculates the intersection of assessing tests across all constituent mutants
+    /// 2. Calculates the union of assessing tests across all constituent mutants  
     /// 3. Uses Jaccard similarity coefficient: |intersection| / |union|
     /// 4. Applies weighting based on the absolute size of the intersection
     /// 
@@ -46,20 +46,20 @@ public class OverlappingTestsHeuristic : BaseHOMHeuristic
             return 0.0; // Cannot be a HOM with less than 2 mutants
         }
 
-        // Get covering tests for each constituent mutant
-        var coveringTestSets = candidate.Select(m => m.CoveringTests).ToList();
+        // Get assessing tests for each constituent mutant
+        var assessingTestSets = candidate.Select(m => m.AssessingTests).ToList();
         
         // Handle edge cases
-        if (coveringTestSets.Any(tests => tests == null || tests.IsEmpty))
+        if (assessingTestSets.Any(tests => tests == null || tests.IsEmpty))
         {
-            return 0.0; // If any mutant has no covering tests, no overlap is possible
+            return 0.0; // If any mutant has no assessing tests, no overlap is possible
         }
 
         // Calculate intersection (tests that cover ALL constituent mutants)
-        var intersection = coveringTestSets[0];
-        for (var i = 1; i < coveringTestSets.Count; i++)
+        var intersection = assessingTestSets[0];
+        for (var i = 1; i < assessingTestSets.Count; i++)
         {
-            intersection = intersection.Intersect(coveringTestSets[i]);
+            intersection = intersection.Intersect(assessingTestSets[i]);
         }
 
         // If no intersection, score is 0
@@ -69,10 +69,10 @@ public class OverlappingTestsHeuristic : BaseHOMHeuristic
         }
 
         // Calculate union (all tests that cover ANY constituent mutant and in turn the tests which cover the HOM)
-        var union = coveringTestSets[0];
-        for (var i = 1; i < coveringTestSets.Count; i++)
+        var union = assessingTestSets[0];
+        for (var i = 1; i < assessingTestSets.Count; i++)
         {
-            union = union.Merge(coveringTestSets[i]);
+            union = union.Merge(assessingTestSets[i]);
         }
 
         // Calculate Jaccard similarity coefficient
@@ -115,13 +115,13 @@ public class OverlappingTestsHeuristic : BaseHOMHeuristic
 
     /// <summary>
     /// Provides additional filtering based on minimum overlap requirements.
-    /// Can be enabled to filter out candidates with insufficient covering test overlap.
+    /// Can be enabled to filter out candidates with insufficient assessing test overlap.
     /// </summary>
     /// <param name="candidate">The candidate HOM to evaluate</param>
     /// <returns>True if the candidate should be filtered out due to insufficient overlap</returns>
     public override bool ShouldFilterCandidate(List<IMutant> candidate)
     {
-        // Optional: Enable filtering for candidates with no covering test overlap
+        // Optional: Enable filtering for candidates with no assessing test overlap
         // This can be useful to avoid creating HOMs that have no potential for SSHOM validation
         
         if (candidate == null || candidate.Count < 2)
@@ -129,22 +129,22 @@ public class OverlappingTestsHeuristic : BaseHOMHeuristic
             return true; // Filter out invalid candidates
         }
 
-        // Check if there's any covering test overlap at all
-        var coveringTestSets = candidate.Select(m => m.CoveringTests).ToList();
+        // Check if there's any assessing test overlap at all
+        var assessingTestSets = candidate.Select(m => m.AssessingTests).ToList();
         
-        if (coveringTestSets.Any(tests => tests == null || tests.IsEmpty))
+        if (assessingTestSets.Any(tests => tests == null || tests.IsEmpty))
         {
-            return true; // Filter out if any mutant has no covering tests
+            return true; // Filter out if any mutant has no assessing tests
         }
 
         // Calculate intersection
-        var intersection = coveringTestSets[0];
-        for (var i = 1; i < coveringTestSets.Count; i++)
+        var intersection = assessingTestSets[0];
+        for (var i = 1; i < assessingTestSets.Count; i++)
         {
-            intersection = intersection.Intersect(coveringTestSets[i]);
+            intersection = intersection.Intersect(assessingTestSets[i]);
         }
 
-        // Filter out candidates with no overlapping covering tests
+        // Filter out candidates with no overlapping assessing tests
         // These have zero potential for becoming SSHOMs
         return intersection.IsEmpty;
     }
@@ -159,18 +159,18 @@ public class OverlappingTestsHeuristic : BaseHOMHeuristic
             return "Invalid candidate for overlap analysis";
         }
 
-        var coveringTestSets = candidate.Select(m => m.CoveringTests).ToList();
+        var assessingTestSets = candidate.Select(m => m.AssessingTests).ToList();
         
-        var intersection = coveringTestSets[0];
-        for (var i = 1; i < coveringTestSets.Count; i++)
+        var intersection = assessingTestSets[0];
+        for (var i = 1; i < assessingTestSets.Count; i++)
         {
-            intersection = intersection.Intersect(coveringTestSets[i]);
+            intersection = intersection.Intersect(assessingTestSets[i]);
         }
 
-        var union = coveringTestSets[0];
-        for (var i = 1; i < coveringTestSets.Count; i++)
+        var union = assessingTestSets[0];
+        for (var i = 1; i < assessingTestSets.Count; i++)
         {
-            union = union.Merge(coveringTestSets[i]);
+            union = union.Merge(assessingTestSets[i]);
         }
 
         var intersectionSize = intersection.GetIdentifiers().Count();

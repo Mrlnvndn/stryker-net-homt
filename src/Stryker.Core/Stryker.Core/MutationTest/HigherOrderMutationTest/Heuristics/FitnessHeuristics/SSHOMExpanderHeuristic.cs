@@ -57,7 +57,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             if (IsPotentialSSHOM(candidate) && candidate.Count < _maxHomSize)
             {
                 // Check if we already have something very similar before adding
-                bool isDuplicate = _potentialSSHOMs.Any(s => CalculateSimilarity(s, candidate) > 0.8);
+                var isDuplicate = _potentialSSHOMs.Any(s => CalculateSimilarity(s, candidate) > 0.8);
                 
                 if (!isDuplicate)
                 {
@@ -101,7 +101,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
                 }
                 
                 // If this is a newly found potential SSHOM, add it to our tracking list
-                bool isNewSSHOM = !_potentialSSHOMs.Any(s => CalculateSimilarity(s, currentCandidate) > 0.8);
+                var isNewSSHOM = !_potentialSSHOMs.Any(s => CalculateSimilarity(s, currentCandidate) > 0.8);
                 if (isNewSSHOM)
                 {
                     _potentialSSHOMs.Add(new List<IMutant>(currentCandidate));
@@ -129,7 +129,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             
             // The simplified approach: if all mutants have killing tests and there's some overlap,
             // then it might be a potential SSHOM
-            bool allHaveKillingTests = candidate.All(m => m.KillingTests != null && !m.KillingTests.IsEmpty);
+            var allHaveKillingTests = candidate.All(m => m.KillingTests != null && !m.KillingTests.IsEmpty);
             
             if (!allHaveKillingTests)
             {
@@ -140,7 +140,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             // Since we don't have access to the actual test IDs in this interface implementation,
             // we'll use a simple heuristic: if both have killing tests, assume there might be overlap
             // This is just a placeholder until we can implement proper test intersection logic
-            bool hasOverlap = candidate.Skip(1).Any(m => 
+            var hasOverlap = candidate.Skip(1).Any(m => 
                 m.KillingTests != null && 
                 !m.KillingTests.IsEmpty && 
                 candidate[0].KillingTests != null && 

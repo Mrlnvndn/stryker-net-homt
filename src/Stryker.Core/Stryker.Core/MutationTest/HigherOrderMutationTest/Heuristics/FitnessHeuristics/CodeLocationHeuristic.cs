@@ -1,7 +1,6 @@
 using Microsoft.CodeAnalysis;
 using Stryker.Abstractions;
 using Stryker.Abstractions.Options;
-using Stryker.Core.MutationTest;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
@@ -22,9 +21,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         public override string Name => "CodeLocation";
         public override double Weight => 2.0; // Increased weight due to better precision
         public override bool IsSearchStrategyHeuristic => false;
-        public override bool IsFitnessScoringHeuristic => true;
-
-        
+        public override bool IsFitnessScoringHeuristic => false;
 
         protected override void OnInitialized()
         {
@@ -152,7 +149,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             {
                 // Bonus for methods that are close together
                 var proximityBonus = CalculateLineProximityBonus(locations);
-                return 0.85 + (proximityBonus * 0.1);
+                return 0.85 + proximityBonus * 0.1;
             }
 
             // Tier 3: Same namespace, different classes (medium score)

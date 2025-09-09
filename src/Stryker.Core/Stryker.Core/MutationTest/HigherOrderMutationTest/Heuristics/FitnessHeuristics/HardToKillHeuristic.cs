@@ -40,7 +40,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             
             foreach (var mutant in AvailableFOMs)
             {
-                int killingTestCount = CountKillingTests(mutant);
+                var killingTestCount = CountKillingTests(mutant);
                 
                 // Update min/max statistics
                 _minTests = Math.Min(_minTests, killingTestCount);
@@ -67,8 +67,8 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
                 foreach (var mutantId in _mutantScores.Keys.ToList())
                 {
                     // Invert the scale: 0 = easiest to kill, 1 = hardest to kill
-                    double testCount = _mutantScores[mutantId];
-                    _mutantScores[mutantId] = 1.0 - ((testCount - _minTests) / (_maxTests - _minTests));
+                    var testCount = _mutantScores[mutantId];
+                    _mutantScores[mutantId] = 1.0 - (testCount - _minTests) / (_maxTests - _minTests);
                 }
             }
         }
@@ -82,11 +82,11 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             
             // Calculate average difficulty score of the FOMs
             double totalScore = 0;
-            int scoredMutants = 0;
+            var scoredMutants = 0;
             
             foreach (var mutant in candidate)
             {
-                if (_mutantScores.TryGetValue(mutant.Id, out double score))
+                if (_mutantScores.TryGetValue(mutant.Id, out var score))
                 {
                     totalScore += score;
                     scoredMutants++;
@@ -122,7 +122,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             
             // This is a simplified approximation - to be replaced with actual implementation
             // that counts the tests in the ITestIdentifiers collection
-            int estimatedTestCount = 1;
+            var estimatedTestCount = 1;
             
             return Math.Max(estimatedTestCount, 1); // Ensure at least 1 test
         }

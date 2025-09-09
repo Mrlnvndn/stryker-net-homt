@@ -96,17 +96,17 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             }
 
             // Calculate how many dependencies exist between the mutants in this candidate
-            int totalConnections = 0;
-            int possibleConnections = 0;
+            var totalConnections = 0;
+            var possibleConnections = 0;
             
-            for (int i = 0; i < candidate.Count; i++)
+            for (var i = 0; i < candidate.Count; i++)
             {
                 var mutantId = candidate[i].Id;
                 
                 if (_dependencyGraph.TryGetValue(mutantId, out var dependencies))
                 {
                     // Count connections to other mutants in the candidate
-                    for (int j = i + 1; j < candidate.Count; j++)
+                    for (var j = i + 1; j < candidate.Count; j++)
                     {
                         var otherId = candidate[j].Id;
                         if (dependencies.Contains(otherId))

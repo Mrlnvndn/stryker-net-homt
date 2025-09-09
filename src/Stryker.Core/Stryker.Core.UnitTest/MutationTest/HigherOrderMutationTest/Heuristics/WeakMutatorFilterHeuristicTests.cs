@@ -6,9 +6,9 @@ using Shouldly;
 using Stryker.Abstractions;
 using Stryker.Abstractions.Options;
 using Stryker.Core.MutationTest;
-using Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics;
 using Stryker.Core.Mutants;
 using Stryker.TestRunner.Tests;
+using Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics;
 
 namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Heuristics
 {

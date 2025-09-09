@@ -43,7 +43,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             if (candidate.Count <= _maxSize)
             {
                 // Linear decrease from 1.0 for size 2 to 0.5 for max size
-                return NormalizeScore(1.0 - ((candidate.Count - 4) / (double)(_maxSize - 4)));
+                return NormalizeScore(1.0 - (candidate.Count - 4) / (double)(_maxSize - 4));
             }        
             
             return 0.0; // Over max size

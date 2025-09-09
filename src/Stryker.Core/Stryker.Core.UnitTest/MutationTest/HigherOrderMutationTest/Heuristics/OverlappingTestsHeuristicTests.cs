@@ -163,7 +163,7 @@ public class OverlappingTestsHeuristicTests : TestBase
         // Jaccard similarity: 1/3 ≈ 0.333
         // Size weight for 1 test: 0.3
         // Expected score: 0.333 * 0.3 ≈ 0.1
-        score.ShouldBe(0.1);
+        score.ShouldBe(0.1, 0.001);
     }
 
     [TestMethod]
@@ -187,7 +187,7 @@ public class OverlappingTestsHeuristicTests : TestBase
         // Jaccard similarity: 15/19 ≈ 0.789
         // Size weight for 15 tests: 1.0 (maximum)
         // Expected score: 0.789 * 1.0 ≈ 0.789
-        score.ShouldBe(0.789);
+        score.ShouldBe(0.789, 0.001);
     }
 
     [TestMethod]
@@ -208,7 +208,7 @@ public class OverlappingTestsHeuristicTests : TestBase
         // Jaccard similarity: 1/6 ≈ 0.167
         // Size weight for 1 test: 0.3
         // Expected score: 0.167 * 0.3 ≈ 0.05
-        score.ShouldBe(0.05);
+        score.ShouldBe(0.05, 0.001);
     }
 
     [TestMethod]
@@ -229,7 +229,7 @@ public class OverlappingTestsHeuristicTests : TestBase
         // Jaccard similarity: 1/7 ≈ 0.143
         // Size weight for 1 test: 0.3
         // Expected score: 0.143 * 0.3 ≈ 0.043
-        score.ShouldBe(0.043);
+        score.ShouldBe(0.043, 0.001);
     }
 
     #endregion

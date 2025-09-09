@@ -76,10 +76,10 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
                  || es.Expression is PrefixUnaryExpressionSyntax);
             }
 
-            bool IsEmptyReplacement(SyntaxNode? n) =>
+            bool IsEmptyReplacement(SyntaxNode n) =>
                 n is null
                 || n.IsKind(SyntaxKind.EmptyStatement)
-                || (n is BlockSyntax b && b.Statements.Count == 0);
+                || n is BlockSyntax b && b.Statements.Count == 0;
 
             if (orig is StatementSyntax s && IsExprStmt(s) && IsEmptyReplacement(repl))
             {

@@ -90,14 +90,11 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
 
             // Register other default heuristics that don't need max order configuration
             _heuristicRegistry.RegisterHeuristic(new CodeLocationHeuristic());
-            _heuristicRegistry.RegisterHeuristic(new HardToKillHeuristic());
-            _heuristicRegistry.RegisterHeuristic(new MutatorTypeHeuristic());
-            _heuristicRegistry.RegisterHeuristic(new WeakMutatorFilterHeuristic());
-            _heuristicRegistry.RegisterHeuristic(new SyntaxNodeConflictHeuristic());
             _heuristicRegistry.RegisterHeuristic(new EmptyAssessingTestsFilterHeuristic());
-
-            // Register SSHOM-specific heuristic
-            _heuristicRegistry.RegisterHeuristic(new SSHOMPredictionHeuristic());
+            _heuristicRegistry.RegisterHeuristic(new MutatorTypeHeuristic());
+            _heuristicRegistry.RegisterHeuristic(new OverlappingTestsHeuristic());
+            _heuristicRegistry.RegisterHeuristic(new SyntaxNodeConflictHeuristic());
+            _heuristicRegistry.RegisterHeuristic(new WeakMutatorFilterHeuristic());
 
             // For backward compatibility, register the provided legacy heuristics if not null
             if (heuristics != null)
@@ -333,7 +330,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                     {
                         if (!groupFOMs[i].AssessingTests.Intersect(groupFOMs[j].AssessingTests).IsEmpty)
                         {
-                            pairs.Add(new List<IMutant> { groupFOMs[i], groupFOMs[j] });
+                            pairs.Add([groupFOMs[i], groupFOMs[j]]);
                         }
                     }
                 }
@@ -381,7 +378,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                 return candidates;
 
             // Apply only critical filters that would cause runtime errors
-            var criticalFiltered = candidates.Where(c => !ShouldCriticallyFilter(c, heuristicRegistry)).ToList();
+            var criticalFiltered = candidates.Where(c => !_heuristicRegistry.ShouldFilterCandidate(c)).ToList();
 
             // If we lost too many candidates, fall back to best scored candidates
             if (criticalFiltered.Count < Math.Max(2, candidates.Count / 4))
@@ -464,7 +461,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             foreach (var candidate in candidates)
             {
                 // Skip candidates that should be critically filtered
-                if (ShouldCriticallyFilter(candidate, _heuristicRegistry))
+                if (_heuristicRegistry.ShouldFilterCandidate(candidate))
                 {
                     continue;
                 }
@@ -606,8 +603,10 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         private bool ShouldYieldCandidate(List<IMutant> candidate, int iteration)
         {
             // Critical filters always apply
-            if (ShouldCriticallyFilter(candidate, _heuristicRegistry))
+            if (_heuristicRegistry.ShouldFilterCandidate(candidate))
+            {
                 return false;
+            }
 
             // Early iterations: stricter filtering for quality
             if (iteration < _maxIterations / 3)
@@ -617,17 +616,6 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
 
             // Later iterations: more lenient to ensure diversity
             return ScoreCandidateForSSHOMPotential(candidate) > 0.3;
-        }
-
-        /// <summary>
-        /// Only applies critical filters that would cause runtime errors.
-        /// </summary>
-        private bool ShouldCriticallyFilter(List<IMutant> candidate, HeuristicRegistry registry)
-        {
-            // Only apply truly critical heuristics
-            return candidate.Count < 2 ||
-                   candidate.Count > _maxOrder ||
-                   CalculateAssessingTestsIntersection(candidate).IsEmpty;
         }
 
         /// <summary>
@@ -659,7 +647,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         /// <summary>
         /// Calculates the intersection of assessing tests for a list of mutants.
         /// </summary>
-        private ITestIdentifiers CalculateAssessingTestsIntersection(List<IMutant> candidate)
+        private static ITestIdentifiers CalculateAssessingTestsIntersection(List<IMutant> candidate)
         {
             if (candidate.Count == 0)
                 return null;
@@ -697,7 +685,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         /// <summary>
         /// Checks if replacing a mutant would improve the intersection.
         /// </summary>
-        private bool WouldImproveIntersection(List<IMutant> candidate, int index, IMutant replacement)
+        private static bool WouldImproveIntersection(List<IMutant> candidate, int index, IMutant replacement)
         {
             var tempCandidate = new List<IMutant>(candidate);
             tempCandidate[index] = replacement;
@@ -751,11 +739,19 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             public bool Equals(List<IMutant> x, List<IMutant> y)
             {
                 if (ReferenceEquals(x, y))
+                {
                     return true;
+                }
+
                 if (x is null || y is null)
+                {
                     return false;
+                }
+
                 if (x.Count != y.Count)
+                {
                     return false;
+                }
 
                 var xIds = x.Select(m => m.Id).OrderBy(id => id).ToArray();
                 var yIds = y.Select(m => m.Id).OrderBy(id => id).ToArray();
@@ -813,7 +809,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             return Math.Min(1.0, score);
         }
 
-        private ITestIdentifiers CalculateIntersection(List<IMutant> candidate)
+        private static ITestIdentifiers CalculateIntersection(List<IMutant> candidate)
         {
             var intersection = candidate[0].AssessingTests;
             for (var i = 1; i < candidate.Count; i++)

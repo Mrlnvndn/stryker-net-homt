@@ -196,6 +196,9 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
             mutantMock.Setup(m => m.CoveringTests).Returns(testIdentifiers);
             mutantMock.Setup(m => m.KillingTests).Returns(TestIdentifierList.NoTest());
 
+            // add mutation type
+            mutantMock.Setup(m => m.Mutation).Returns(new Mutation { Type = Mutator.Math });
+
             return mutantMock.Object;
         }
     }
