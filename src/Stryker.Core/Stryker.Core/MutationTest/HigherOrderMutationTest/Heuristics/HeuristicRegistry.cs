@@ -1,7 +1,10 @@
-using Stryker.Abstractions;
-using Stryker.Abstractions.Options;
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using Stryker.Abstractions;
+using Stryker.Abstractions.Options;
+using Stryker.Abstractions.Testing;
+using Stryker.Core.MutationTest;
 
 namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
 {
@@ -24,20 +27,18 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// <param name="options">The stryker options.</param>
         /// <param name="mutationTestInput">The mutation test input.</param>
         /// <param name="registerAllHeuristics">Whether to register the default heuristics.</param>
-        public HeuristicRegistry(IReadOnlyCollection<IMutant> availableFOMs, IStrykerOptions options, MutationTestInput mutationTestInput, bool registerAllHeuristics = true)
+        public HeuristicRegistry(IReadOnlyCollection<IMutant> availableFOMs, IStrykerOptions options, MutationTestInput mutationTestInput, bool registerAllHeuristics = false)
         {
             // Register default heuristics with default weights
             if (registerAllHeuristics)
             {
                 RegisterAllHeuristics();
             }
-            else
+            
+            // Initialize all registered heuristics
+            foreach (var heuristic in _registeredHeuristics)
             {
-                // Initialize all registered heuristics
-                foreach (var heuristic in _registeredHeuristics)
-                {
-                    heuristic.Initialize(availableFOMs, options, mutationTestInput);
-                }
+                heuristic.Initialize(availableFOMs, options, mutationTestInput);
             }
         }
 
@@ -68,6 +69,14 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// <returns>A collection of search guidance heuristics.</returns>
         public IEnumerable<IHOMHeuristic> GetSearchGuidanceHeuristics() =>
             _registeredHeuristics.Where(h => h.IsSearchStrategyHeuristic);
+
+        /// <summary>
+        /// Gets a specific heuristic by type.
+        /// </summary>
+        /// <typeparam name="T">The type of heuristic to find</typeparam>
+        /// <returns>The heuristic instance, or null if not found</returns>
+        public T GetHeuristic<T>() where T : class, IHOMHeuristic =>
+            _registeredHeuristics.OfType<T>().FirstOrDefault();
             
         /// <summary>
         /// Scores a candidate HOM using all registered scoring heuristics.
@@ -95,7 +104,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             
             return totalWeight > 0 ? totalScore / totalWeight : 0.5;
         }
-        
+
         /// <summary>
         /// Determines whether a candidate HOM should be filtered out.
         /// </summary>

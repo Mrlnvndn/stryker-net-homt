@@ -111,20 +111,8 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
                 return 0; // No tests kill this mutant (potentially equivalent mutant)
             }
             
-            // Here, in a real implementation, we'd have access to the
-            // actual count of tests in the KillingTests collection.
-            // For now, we'll use a simplified approach.
-            
-            var testIds = new HashSet<string>();
-            
-            // Placeholder implementation - in real code this would access the test identifiers
-            // and count them properly according to the ITestIdentifiers implementation
-            
-            // This is a simplified approximation - to be replaced with actual implementation
-            // that counts the tests in the ITestIdentifiers collection
-            var estimatedTestCount = 1;
-            
-            return Math.Max(estimatedTestCount, 1); // Ensure at least 1 test
+            // Count the actual number of killing tests
+            return mutant.KillingTests.Count;
         }
     }
 }
