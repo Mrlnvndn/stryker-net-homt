@@ -13,16 +13,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// <summary>
         /// The maximum number of FOMs allowed in a HOM.
         /// </summary>
-        private readonly int _maxSize;
-        
-        /// <summary>
-        /// Initializes a new instance of the <see cref="MaxSizeLimitHeuristic"/> class.
-        /// </summary>
-        /// <param name="maxSize">The maximum number of FOMs allowed in a HOM.</param>
-        public MaxSizeLimitHeuristic(int maxSize = 4)
-        {
-            _maxSize = maxSize;
-        }
+        private readonly int _maxSize = 4;
 
         public override string Name => "MaxSizeLimit";
         
@@ -32,26 +23,8 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         
         public override bool IsFitnessScoringHeuristic => true;
         
-        public override double ScoreCandidate(List<IMutant> candidate)
-        {
-            if (candidate == null || candidate.Count < 2)
-            {
-                return 0.0; // Invalid candidate
-            }
-            
-            // Size 2 gets highest score, then diminishing returns
-            if (candidate.Count <= _maxSize)
-            {
-                // Linear decrease from 1.0 for size 2 to 0.5 for max size
-                return NormalizeScore(1.0 - (candidate.Count - 4) / (double)(_maxSize - 4));
-            }        
-            
-            return 0.0; // Over max size
-        }
-        
-        public override bool ShouldFilterCandidate(List<IMutant> candidate)
-        {
-            return candidate == null || candidate.Count < 2 || candidate.Count > _maxSize;
-        }
+        public override double ScoreCandidate(List<IMutant> candidate) => ShouldFilterCandidate(candidate) ? 0.0 : 1.0;
+
+        public override bool ShouldFilterCandidate(List<IMutant> candidate) => candidate == null || candidate.Count < 2 || candidate.Count > _maxSize;
     }
 }

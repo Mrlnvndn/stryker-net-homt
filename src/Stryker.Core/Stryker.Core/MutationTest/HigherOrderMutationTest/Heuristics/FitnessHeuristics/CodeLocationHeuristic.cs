@@ -19,9 +19,9 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         private readonly Dictionary<int, LocationInfo> _locationMap = [];
 
         public override string Name => "CodeLocation";
-        public override double Weight => 2.0; // Increased weight due to better precision
+        public override double Weight => 2.0;
         public override bool IsSearchStrategyHeuristic => false;
-        public override bool IsFitnessScoringHeuristic => false;
+        public override bool IsFitnessScoringHeuristic => true;
 
         protected override void OnInitialized()
         {

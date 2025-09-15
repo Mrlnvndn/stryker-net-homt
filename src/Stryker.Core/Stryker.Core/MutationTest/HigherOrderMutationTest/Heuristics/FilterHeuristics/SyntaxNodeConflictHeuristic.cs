@@ -22,14 +22,10 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         
         public override bool IsFilteringHeuristic => true;
         
-        public override bool IsFitnessScoringHeuristic => false;
-        
-        public override double ScoreCandidate(List<IMutant> candidate)
-        {
-            // Not used since this is a filtering heuristic
-            return 0.0;
-        }
-        
+        public override bool IsFitnessScoringHeuristic => true;
+
+        public override double ScoreCandidate(List<IMutant> candidate) => ShouldFilterCandidate(candidate) ? 0 : 1;
+
         public override bool ShouldFilterCandidate(List<IMutant> candidate)
         {
             if (candidate == null || candidate.Count < 2)

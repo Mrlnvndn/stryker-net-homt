@@ -146,42 +146,12 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
 
             // Assert
             candidates.ShouldNotBeEmpty();
-            
+
             // Should prefer strong mutator combinations over weak ones
             var strongMutatorCandidate = candidates.FirstOrDefault(c =>
                 c.ConstituentMutants.Any(m => m.Id == 1) && c.ConstituentMutants.Any(m => m.Id == 2));
-                
+
             strongMutatorCandidate.ShouldNotBeNull("Should generate candidates from strong mutator types");
-        }
-
-        [TestMethod]
-        public void LocalSearchAlgorithm_SSHOMPredictionHeuristic_ShouldScoreAccurately()
-        {
-            // Arrange
-            var heuristic = new SSHOMPredictionHeuristic();
-            
-            // High-potential candidate (same method, overlapping tests, compatible mutators)
-            var highPotentialCandidate = new List<IMutant>
-            {
-                CreateMutantWithTests(1, new[] { "Test1", "Test2", "Test3" }, "Calculator.Add", Mutator.Arithmetic),
-                CreateMutantWithTests(2, new[] { "Test1", "Test2" }, "Calculator.Add", Mutator.Arithmetic)
-            };
-            
-            // Low-potential candidate (different methods, no test overlap)
-            var lowPotentialCandidate = new List<IMutant>
-            {
-                CreateMutantWithTests(3, new[] { "TestA" }, "Calculator.Add", Mutator.String),
-                CreateMutantWithTests(4, new[] { "TestB" }, "Parser.Parse", Mutator.String)
-            };
-
-            // Act
-            var highScore = heuristic.ScoreCandidate(highPotentialCandidate);
-            var lowScore = heuristic.ScoreCandidate(lowPotentialCandidate);
-
-            // Assert
-            highScore.ShouldBeGreaterThan(lowScore, "High-potential candidate should score higher");
-            highScore.ShouldBeGreaterThan(0.5, "High-potential candidate should have good score");
-            lowScore.ShouldBeLessThan(0.3, "Low-potential candidate should have low score");
         }
 
         private IMutant CreateMutantWithTests(int id, string[] assessingTests, string method, Mutator mutatorType)

@@ -15,7 +15,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// <summary>
         /// Cache of test count scores for each mutant (higher score = harder to kill)
         /// </summary>
-        private readonly Dictionary<int, double> _mutantScores = new();
+        private readonly Dictionary<int, double> _mutantScores = [];
         
         /// <summary>
         /// The minimum and maximum number of killing tests found for any mutant
@@ -104,7 +104,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// <summary>
         /// Counts how many tests kill the given mutant.
         /// </summary>
-        private int CountKillingTests(IMutant mutant)
+        private static int CountKillingTests(IMutant mutant)
         {
             if (mutant.KillingTests == null || mutant.KillingTests.IsEmpty)
             {

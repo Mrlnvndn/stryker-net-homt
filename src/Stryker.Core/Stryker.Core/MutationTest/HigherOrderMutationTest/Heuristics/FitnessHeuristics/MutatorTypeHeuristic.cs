@@ -59,7 +59,10 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
                 }               
             }          
             
-            return NormalizeScore(totalScore);
+            var normalizedScore = NormalizeScore(totalScore);
+            
+            // Add NaN protection
+            return double.IsNaN(normalizedScore) || double.IsInfinity(normalizedScore) ? 0.0 : normalizedScore;
         }
 
         private static bool IsExpressionRemoval(Mutant m)

@@ -80,18 +80,8 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             // Initialize heuristic registry with all available heuristics but without default heuristics
             _heuristicRegistry = new HeuristicRegistry(availableMutants, options, mutationTestInput, registerAllHeuristics: false);
             
-            // Register default heuristics with the correct max order limit
-            _heuristicRegistry.RegisterHeuristic(new MaxSizeLimitHeuristic(maxOrder));
             
-            // Register other default heuristics that don't need max order configuration
-            _heuristicRegistry.RegisterHeuristic(new CodeLocationHeuristic());
-            _heuristicRegistry.RegisterHeuristic(new HardToKillHeuristic());
-            _heuristicRegistry.RegisterHeuristic(new MutatorTypeHeuristic());
-            _heuristicRegistry.RegisterHeuristic(new WeakMutatorFilterHeuristic());
-            _heuristicRegistry.RegisterHeuristic(new SyntaxNodeConflictHeuristic());
-            _heuristicRegistry.RegisterHeuristic(new EmptyAssessingTestsFilterHeuristic());
-            
-            // For backward compatibility, register the provided legacy heuristic if it's not null
+            // Register the provided legacy heuristic if it's not null
             if (heuristics != null)
             {
                 foreach (var heuristic in heuristics)
@@ -131,7 +121,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             var scoredCandidates = ScoreAndRankCandidates(candidatePool, _heuristicRegistry);
 
             // Filter initial candidates
-            candidatePool.RemoveAll(_heuristicRegistry.ShouldFilterCandidate);
+            candidatePool.RemoveAll(candidate => _heuristicRegistry.ShouldFilterCandidate(candidate));
 
             // Main local search loop
             for (var iteration = 0; iteration < _maxIterations; iteration++)

@@ -27,6 +27,8 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         public override double Weight => 2.0;
 
         public override bool IsFitnessScoringHeuristic => true;
+
+        public override bool RequiresPreRun => true;
         
         /// <summary>
         /// Initializes a new instance of the <see cref="SSHOMExpanderHeuristic"/> class.

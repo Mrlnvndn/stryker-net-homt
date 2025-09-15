@@ -47,7 +47,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// Indicates whether this heuristic is used for fitness scoring of candidates.
         /// Default is true if Weight > 0.
         /// </summary>
-        public virtual bool IsFitnessScoringHeuristic => Weight > 0;
+        public virtual bool IsFitnessScoringHeuristic => false;
 
         /// <summary>
         /// Indicates wether this heuristic requires a pre-run to gather context data like what tests kill it.

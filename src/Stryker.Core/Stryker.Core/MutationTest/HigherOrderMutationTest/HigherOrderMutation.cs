@@ -98,6 +98,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
         {
             var testedCandidates = TestedCandidates.ToList();
             var validatedCount = 0;
+            var sshomsByOrder = new Dictionary<int, int>();
 
             foreach (var candidate in testedCandidates)
             {
@@ -105,7 +106,19 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
                 {
                     _verifiedSSHOMs.Add(candidate);
                     validatedCount++;
+                    
+                    // Track by order
+                    var order = candidate.Order;
+                    sshomsByOrder[order] = sshomsByOrder.GetValueOrDefault(order, 0) + 1;
                 }
+            }
+
+            // Log breakdown by order
+            if (sshomsByOrder.Any())
+            {
+                var breakdown = string.Join(", ", sshomsByOrder.OrderBy(kvp => kvp.Key)
+                    .Select(kvp => $"{kvp.Key}th-order: {kvp.Value}"));
+                _logger.LogDebug("SSHOM validation complete: {Breakdown}", breakdown);
             }
 
             return validatedCount;
@@ -438,15 +451,42 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
             _logger.LogDebug("Starting SSHOM analysis...");
             
             var testedCandidates = TestedCandidates.ToList();
+            var sshomsByOrder = new Dictionary<int, int>();
 
-            var sshomCount = ValidateAllTestedCandidatesAsSSHOMs(requireProperSubset);
+            // Reset verified SSHOMs to ensure clean state
+            _verifiedSSHOMs.Clear();
+            var sshomCount = 0;
+
+            foreach (var candidate in testedCandidates)
+            {
+                if (ValidateSSHOMFromCandidate(candidate, requireProperSubset))
+                {
+                    _verifiedSSHOMs.Add(candidate);
+                    sshomCount++;
+                    
+                    // Track by order
+                    var order = candidate.Order;
+                    sshomsByOrder[order] = sshomsByOrder.GetValueOrDefault(order, 0) + 1;
+                }
+            }
 
             var analysisTime = DateTime.Now - startTime;
             
-            _logger.LogInformation("SSHOM Analysis Complete: {SSHOMCount} SSHOMs found out of {TestedCandidates} tested candidates in {AnalysisTime}ms", 
-                sshomCount, testedCandidates.Count, analysisTime.TotalMilliseconds);
+            // Enhanced logging with order breakdown
+            if (sshomsByOrder.Any())
+            {
+                var breakdown = string.Join(", ", sshomsByOrder.OrderBy(kvp => kvp.Key)
+                    .Select(kvp => $"{kvp.Key}th-order: {kvp.Value}"));
+                _logger.LogInformation("SSHOM Analysis Complete: {SSHOMCount} SSHOMs found out of {TestedCandidates} tested candidates in {AnalysisTime}ms. Breakdown: {Breakdown}", 
+                    sshomCount, testedCandidates.Count, analysisTime.TotalMilliseconds, breakdown);
+            }
+            else
+            {
+                _logger.LogInformation("SSHOM Analysis Complete: {SSHOMCount} SSHOMs found out of {TestedCandidates} tested candidates in {AnalysisTime}ms", 
+                    sshomCount, testedCandidates.Count, analysisTime.TotalMilliseconds);
+            }
 
-            return new SSHOMAnalysisResult(sshomCount, testedCandidates.Count, analysisTime);
+            return new SSHOMAnalysisResult(sshomCount, testedCandidates.Count, analysisTime, sshomsByOrder);
         }
 
         /// <summary>

@@ -9,77 +9,61 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
     /// <summary>
     /// Result of Higher-Order Mutant generation with metadata about the process.
     /// </summary>
-    public class HOMGenerationResult
+    public class HOMGenerationResult(
+        IEnumerable<IMutant> mutantGroups,
+        bool isPreTestRun,
+        string algorithmUsed,
+        int heuristicsUsed,
+        int mutantsIncludedInHOMs,
+        int mutantsMissingFromHOMs,
+        TimeSpan generationTime,
+        IEnumerable<HigherOrderMutant> candidatesCreated = null)
     {
-        public HOMGenerationResult(
-            IEnumerable<IMutant> mutantGroups,
-            bool isPreTestRun,
-            string algorithmUsed,
-            int heuristicsUsed,
-            int mutantsIncludedInHOMs,
-            int mutantsMissingFromHOMs,
-            TimeSpan generationTime,
-            IEnumerable<HigherOrderMutant> candidatesCreated = null)
-        {
-            MutantGroups = mutantGroups.ToList();
-            IsPreTestRun = isPreTestRun;
-            AlgorithmUsed = algorithmUsed ?? "Unknown";
-            HeuristicsUsed = heuristicsUsed;
-            MutantsIncludedInHOMs = mutantsIncludedInHOMs;
-            MutantsMissingFromHOMs = mutantsMissingFromHOMs;
-            GenerationTime = generationTime;
-            CandidatesCreated = candidatesCreated?.ToList() ?? new List<HigherOrderMutant>();
-        }
 
         /// <summary>
         /// The generated HOM groups ready for testing.
         /// </summary>
-        public IReadOnlyList<IMutant> MutantGroups { get; }
+        public IReadOnlyList<IMutant> MutantGroups { get; } = [.. mutantGroups];
 
         /// <summary>
         /// The individual HOM candidates created during generation.
         /// </summary>
-        public IReadOnlyList<HigherOrderMutant> CandidatesCreated { get; }
+        public IReadOnlyList<HigherOrderMutant> CandidatesCreated { get; } = candidatesCreated?.ToList() ?? [];
 
         /// <summary>
         /// Whether this was a pre-test run (without killing test data) or post-test run (with killing test data).
         /// </summary>
-        public bool IsPreTestRun { get; }
+        public bool IsPreTestRun { get; } = isPreTestRun;
 
         /// <summary>
         /// The name of the algorithm used for HOM generation.
         /// </summary>
-        public string AlgorithmUsed { get; }
+        public string AlgorithmUsed { get; } = algorithmUsed ?? "Unknown";
 
         /// <summary>
         /// The number of heuristics used during generation.
         /// </summary>
-        public int HeuristicsUsed { get; }
+        public int HeuristicsUsed { get; } = heuristicsUsed;
 
         /// <summary>
         /// The total number of HOM candidates generated before filtering.
         /// </summary>
-        public int CandidatesGenerated { get; }
-
-        /// <summary>
-        /// The number of candidates filtered out by heuristics.
-        /// </summary>
-        public int CandidatesFiltered { get; }
+        public int CandidatesGenerated => CandidatesCreated?.Count ?? 0;
 
         /// <summary>
         /// The number of mutants that were included in at least one HOM.
         /// </summary>
-        public int MutantsIncludedInHOMs { get; }
+        public int MutantsIncludedInHOMs { get; } = mutantsIncludedInHOMs;
 
         /// <summary>
         /// The number of mutants that were not included in any HOM.
         /// </summary>
-        public int MutantsMissingFromHOMs { get; }
+        public int MutantsMissingFromHOMs { get; } = mutantsMissingFromHOMs;
 
         /// <summary>
         /// The time taken to generate the HOMs.
         /// </summary>
-        public TimeSpan GenerationTime { get; }
+        public TimeSpan GenerationTime { get; } = generationTime;
 
         /// <summary>
         /// Gets the total number of test groups (HOMs + missing mutants if included).

@@ -170,7 +170,7 @@ public class MutationTestProcess : IMutationTestProcess
 
 
     private bool TestUpdateHandler(IEnumerable<IMutant> testedMutants, ITestIdentifiers failedTests, ITestIdentifiers ranTests,
-        ITestIdentifiers timedOutTest, ISet<IMutant> reportedMutants)
+        ITestIdentifiers timedOutTests, ISet<IMutant> reportedMutants)
     {
         var testsFailingInitially = Input.InitialTestRun.Result.FailingTests.GetIdentifiers().ToHashSet();
         
@@ -193,7 +193,7 @@ public class MutationTestProcess : IMutationTestProcess
             // AnalyzeTestRun handles everything automatically:
             // - For regular FOMs: Updates the FOM directly
             // - For HOMs: Updates the HOM AND all its constituent copies
-            mutant.AnalyzeTestRun(failedTests, ranTests, timedOutTest, false);
+            mutant.AnalyzeTestRun(failedTests, ranTests, timedOutTests, false);
             
             Logger.LogTrace("HOMT: Mutant {MutantId} status: {OldStatus} -> {NewStatus}", 
                 mutant.Id, oldStatus, mutant.ResultStatus);
@@ -369,8 +369,22 @@ public class MutationTestProcess : IMutationTestProcess
         //var geneticAlgorithm = new GeneticSearchAlgorithm(Input, null, _options, mutantsToTest, true);
         //higherOrderMutation.AddSearchAlgorithm(geneticAlgorithm);
 
-        var localSearchAlgorithmV2 = new LocalSearchAlgorithmV2(Input, null, _options, mutantsToTest);
-        higherOrderMutation.AddSearchAlgorithm(localSearchAlgorithmV2); 
+        var heuristics = new List<IHOMHeuristic>()
+        {
+            new EmptyAssessingTestsFilterHeuristic(),
+            new MaxSizeLimitHeuristic(),
+            new SyntaxNodeConflictHeuristic(),
+
+            new CodeLocationHeuristic(),
+            new MutatorTypeHeuristic(),
+            new OverlappingTestsHeuristic(),
+        };
+
+        var GeneticSearchAlgorithm = new GeneticSearchAlgorithm(Input, heuristics, _options, mutantsToTest);
+
+        var localSearchAlgorithmV2 = new LocalSearchAlgorithmV2(Input, heuristics, _options, mutantsToTest);
+
+        higherOrderMutation.AddSearchAlgorithm(GeneticSearchAlgorithm); 
 
         Input.HigherOrderMutation = higherOrderMutation;
 
@@ -382,7 +396,7 @@ public class MutationTestProcess : IMutationTestProcess
         Logger.LogInformation("HOMT: Generation completed - Algorithm: {AlgorithmUsed}, Candidates: {CandidatesGenerated}, " +
                              "Heuristics: {HeuristicsUsed}, Time: {GenerationTime:F2}ms, Total Mutants: {TotalMutants}",
             result.AlgorithmUsed, result.CandidatesGenerated, result.HeuristicsUsed, 
-            result.GenerationTime.TotalMilliseconds, result.MutantGroups.Count());
+            result.GenerationTime.TotalMilliseconds, result.MutantGroups.Count);
             
         // Log breakdown of mutant types
         var homResults = result.MutantGroups.OfType<HigherOrderMutant>().ToList();

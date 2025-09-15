@@ -33,6 +33,12 @@ public class ProgressBarReporter : IProgressBarReporter, IDisposable
     private bool _hasHigherOrderMutants;
     private bool _totalUpdated = false; // Track if we've already updated the total
 
+    // Track mutants by order
+    private int _secondOrderMutantsCount;
+    private int _thirdOrderMutantsCount;
+    private int _fourthOrderMutantsCount;
+    private int _higherThanFourthOrderMutantsCount;
+
     public ProgressBarReporter(IProgressBar progressBar, IStopWatchProvider stopWatch, IAnsiConsole console = null)
     {
         _progressBar = progressBar;
@@ -60,6 +66,26 @@ public class ProgressBarReporter : IProgressBarReporter, IDisposable
         var isHigherOrderMutant = mutantTestResult is HigherOrderMutant;
         if (isHigherOrderMutant)
         {
+            var hom = (HigherOrderMutant)mutantTestResult;
+            var order = hom.Order;
+            
+            // Track by order
+            switch (order)
+            {
+                case 2:
+                    _secondOrderMutantsCount++;
+                    break;
+                case 3:
+                    _thirdOrderMutantsCount++;
+                    break;
+                case 4:
+                    _fourthOrderMutantsCount++;
+                    break;
+                default:
+                    _higherThanFourthOrderMutantsCount++;
+                    break;
+            }
+
             _higherOrderMutantsCount++;
             
             // First time we detect HOMs and we haven't updated the total yet
@@ -124,9 +150,16 @@ public class ProgressBarReporter : IProgressBarReporter, IDisposable
             _console.WriteLine();
             _console.MarkupLine($"[Bold]Higher-Order Mutation Summary:[/]");
             _console.MarkupLine($"Higher-Order Mutants: [Cyan]{_higherOrderMutantsCount.ToString().PadLeft(length)}[/]");
+            _console.MarkupLine($"Second-Order Mutants: [Cyan]{_secondOrderMutantsCount.ToString().PadLeft(length)}[/]");
+            _console.MarkupLine($"Third-Order Mutants:  [Cyan]{_thirdOrderMutantsCount.ToString().PadLeft(length)}[/]");
+            _console.MarkupLine($"Fourth-Order Mutants: [Cyan]{_fourthOrderMutantsCount.ToString().PadLeft(length)}[/]");
+            if (_higherThanFourthOrderMutantsCount > 0)
+            {
+                _console.MarkupLine($"5+ Order Mutants:     [Cyan]{_higherThanFourthOrderMutantsCount.ToString().PadLeft(length)}[/]");
+            }
             _console.MarkupLine($"First-Order Mutants:  [Cyan]{(_numberOfMutantsRan - _higherOrderMutantsCount).ToString().PadLeft(length)}[/]");
             var homPercentage = _numberOfMutantsRan > 0 ? (double)_higherOrderMutantsCount / _numberOfMutantsRan * 100 : 0;
-            _console.MarkupLine($"HOM Coverage:         [Cyan]{homPercentage:F1}% of total mutants[/]");
+            _console.MarkupLine($"HOM Coverage:         [Cyan]{homPercentage:F1}% of total mutants[/]");            
         }
     }
 

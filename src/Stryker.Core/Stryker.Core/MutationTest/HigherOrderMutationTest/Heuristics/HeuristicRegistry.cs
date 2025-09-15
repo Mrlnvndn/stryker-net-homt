@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using Stryker.Abstractions;
 using Stryker.Abstractions.Options;
@@ -14,7 +15,13 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
     public class HeuristicRegistry
     {
         private readonly List<IHOMHeuristic> _registeredHeuristics = new();
-        
+
+        private readonly IReadOnlyCollection<IMutant> _availableFOMs;
+
+        private readonly MutationTestInput _mutationTestInput;
+
+        private IStrykerOptions _strykerOptions;
+
         /// <summary>
         /// Gets the registered heuristics.
         /// </summary>
@@ -29,16 +36,14 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// <param name="registerAllHeuristics">Whether to register the default heuristics.</param>
         public HeuristicRegistry(IReadOnlyCollection<IMutant> availableFOMs, IStrykerOptions options, MutationTestInput mutationTestInput, bool registerAllHeuristics = false)
         {
+            _availableFOMs = availableFOMs ?? throw new ArgumentNullException(nameof(availableFOMs));
+            _mutationTestInput = mutationTestInput ?? throw new ArgumentNullException(nameof(mutationTestInput));
+            _strykerOptions = options ?? throw new ArgumentNullException(nameof(options));
+
             // Register default heuristics with default weights
             if (registerAllHeuristics)
             {
                 RegisterAllHeuristics();
-            }
-            
-            // Initialize all registered heuristics
-            foreach (var heuristic in _registeredHeuristics)
-            {
-                heuristic.Initialize(availableFOMs, options, mutationTestInput);
             }
         }
 
@@ -46,9 +51,11 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// Registers a new heuristic.
         /// </summary>
         /// <param name="heuristic">The heuristic to register.</param>
-        public void RegisterHeuristic(IHOMHeuristic heuristic) => 
+        public void RegisterHeuristic(IHOMHeuristic heuristic)
+        {
             _registeredHeuristics.Add(heuristic);
-
+            heuristic.Initialize(_availableFOMs, _strykerOptions, _mutationTestInput);
+        }
         /// <summary>
         /// Gets all scoring heuristics.
         /// </summary>
@@ -98,22 +105,46 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             foreach (var heuristic in scoringHeuristics)
             {
                 double score = heuristic.ScoreCandidate(candidate);
+                
+                // Add NaN protection here to prevent propagation
+                if (double.IsNaN(score) || double.IsInfinity(score))
+                {
+                    // Use reflection to get the actual type name for debugging
+                    var heuristicTypeName = heuristic.GetType().Name;
+                    Console.WriteLine($"WARNING: Heuristic {heuristicTypeName} returned {score} for candidate {string.Join(",", candidate.OrderBy(m => m.Id).Select(m => m.Id))} (size: {candidate.Count})");
+                    
+                    // Treat NaN/Infinity as 0 to prevent contamination
+                    score = 0.0;
+                }
+                
                 totalScore += score * heuristic.Weight;
                 totalWeight += heuristic.Weight;
             }
             
-            return totalWeight > 0 ? totalScore / totalWeight : 0.5;
+            var finalScore = totalWeight > 0 ? totalScore / totalWeight : 0.5;
+            
+            // Final protection
+            if (double.IsNaN(finalScore) || double.IsInfinity(finalScore))
+            {
+                Console.WriteLine($"ERROR: Final score is {finalScore} for candidate {string.Join(",", candidate.OrderBy(m => m.Id).Select(m => m.Id))} (size: {candidate.Count})");
+                return 0.0; // Safe fallback
+            }
+            
+            return finalScore;
         }
 
         /// <summary>
         /// Determines whether a candidate HOM should be filtered out.
         /// </summary>
         /// <param name="candidate">The candidate HOM to check.</param>
+        /// <param name="relaxed">If true, uses more lenient filtering criteria.</param>
         /// <returns>True if the candidate should be filtered out, false otherwise.</returns>
         public bool ShouldFilterCandidate(List<IMutant> candidate)
         {
+            var filteringHeuristics = GetFilteringHeuristics();
+            
             // If any heuristic says filter, then filter
-            return GetFilteringHeuristics().Any(h => h.ShouldFilterCandidate(candidate));
+            return filteringHeuristics.Any(h => h.ShouldFilterCandidate(candidate));
         }
         
         /// <summary>

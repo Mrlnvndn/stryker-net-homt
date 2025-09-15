@@ -60,6 +60,11 @@ public class OverlappingTestsHeuristic : BaseHOMHeuristic
         for (var i = 1; i < assessingTestSets.Count; i++)
         {
             intersection = intersection.Intersect(assessingTestSets[i]);
+            // Null safety check for intersection operations
+            if (intersection == null)
+            {
+                return 0.0; // If intersection becomes null, no overlap possible
+            }
         }
 
         // If no intersection, score is 0
@@ -73,11 +78,16 @@ public class OverlappingTestsHeuristic : BaseHOMHeuristic
         for (var i = 1; i < assessingTestSets.Count; i++)
         {
             union = union.Merge(assessingTestSets[i]);
+            // Null safety check for merge operations
+            if (union == null)
+            {
+                return 0.0; // If union becomes null, cannot calculate overlap
+            }
         }
 
-        // Calculate Jaccard similarity coefficient
-        var intersectionSize = intersection.GetIdentifiers().Count();
-        var unionSize = union.GetIdentifiers().Count();
+        // Calculate Jaccard similarity coefficient with null safety
+        var intersectionSize = intersection?.GetIdentifiers()?.Count() ?? 0;
+        var unionSize = union?.GetIdentifiers()?.Count() ?? 0;
         
         if (unionSize == 0)
         {
@@ -85,6 +95,12 @@ public class OverlappingTestsHeuristic : BaseHOMHeuristic
         }
 
         var jaccardSimilarity = (double)intersectionSize / unionSize;
+
+        // Additional NaN protection
+        if (double.IsNaN(jaccardSimilarity) || double.IsInfinity(jaccardSimilarity))
+        {
+            return 0.0;
+        }
 
         // Apply size weighting - favor candidates with larger absolute intersections
         // This helps prioritize candidates that not only have good relative overlap
@@ -94,7 +110,10 @@ public class OverlappingTestsHeuristic : BaseHOMHeuristic
         // Combine Jaccard similarity with size weighting
         var finalScore = jaccardSimilarity * sizeWeight;
 
-        return NormalizeScore(finalScore);
+        var normalizedScore = NormalizeScore(finalScore);
+        
+        // Final NaN protection
+        return double.IsNaN(normalizedScore) || double.IsInfinity(normalizedScore) ? 0.0 : normalizedScore;
     }
 
     /// <summary>

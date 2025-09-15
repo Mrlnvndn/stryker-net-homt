@@ -50,7 +50,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Algorithms
             // Initialize the system under test
             _sut = new GeneticSearchAlgorithm(
                 _inputMock.Object,
-                _heuristicMock.Object,
+                _heuristics,
                 _optionsMock.Object,
                 _testMutants);
         }
