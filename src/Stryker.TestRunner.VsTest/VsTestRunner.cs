@@ -123,7 +123,7 @@ public sealed class VsTestRunner : IDisposable
             var remainingMutants = update?.Invoke(mutants, failedTest, tests, timedOutTest);
 
             var shouldContinueTestRun = _context.Options.OptimizationMode.HasFlag(OptimizationModes.DisableBail) ||
-                           _context.Options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutants);
+                           _context.Options.OptimizationMode.HasFlag(OptimizationModes.HOMTValidate);
 
             if (remainingMutants != false
                 || handlerTestResults.Count >= expectedTests
@@ -404,7 +404,8 @@ public sealed class VsTestRunner : IDisposable
             }
 
             var isHomt = mutantTestsMap != null &&
-                _context.Options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutants);
+                (_context.Options.OptimizationMode.HasFlag(OptimizationModes.HOMTAccelerate) ||
+                 _context.Options.OptimizationMode.HasFlag(OptimizationModes.HOMTValidate));
 
             var runSettings = _context.GenerateRunSettings(timeOut, forCoverage, mutantTestsMap,
                 projectAndTests.HelperNamespace, source.TargetFramework, source.TargetPlatform(), isHomt);

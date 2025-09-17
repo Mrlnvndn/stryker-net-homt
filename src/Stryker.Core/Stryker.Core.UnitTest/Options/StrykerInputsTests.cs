@@ -26,7 +26,8 @@ public class StrykerInputsTests : TestBase
         DiffIgnoreChangesInput = new DiffIgnoreChangesInput(),
         DisableBailInput = new DisableBailInput(),
         DisableMixMutantsInput = new DisableMixMutantsInput(),
-        EnableHigherOrderMutantsInput = new EnableHigherOrderMutantsInput(),
+        HOMTAccelerateInput = new HOMTAccelerateInput(),
+        HOMTValidateInput = new HOMTValidateInput(),
         IgnoreMutationsInput = new IgnoreMutationsInput(),
         FallbackVersionInput = new FallbackVersionInput(),
         IgnoredMethodsInput = new IgnoreMethodsInput(),
@@ -87,11 +88,20 @@ public class StrykerInputsTests : TestBase
     }
 
     [TestMethod]
-    public void EnableHigherOrderMutantsShouldSetOptimizationFlags()
+    public void HOMTAccelerateShouldSetOptimizationFlags()
     {
-        _target.EnableHigherOrderMutantsInput.SuppliedInput = true;
+        _target.HOMTAccelerateInput.SuppliedInput = true;
         var result = _target.ValidateAll();
-        result.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutants).ShouldBeTrue();
+        result.OptimizationMode.HasFlag(OptimizationModes.HOMTAccelerate).ShouldBeTrue();
+        result.OptimizationMode.HasFlag(OptimizationModes.CoverageBasedTest).ShouldBeTrue();
+    }
+
+    [TestMethod]
+    public void HOMTValidateShouldSetOptimizationFlags()
+    {
+        _target.HOMTValidateInput.SuppliedInput = true;
+        var result = _target.ValidateAll();
+        result.OptimizationMode.HasFlag(OptimizationModes.HOMTValidate).ShouldBeTrue();
         result.OptimizationMode.HasFlag(OptimizationModes.CoverageBasedTest).ShouldBeTrue();
     }
 

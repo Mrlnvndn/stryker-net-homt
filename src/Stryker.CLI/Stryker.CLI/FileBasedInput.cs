@@ -58,6 +58,12 @@ public class FileBasedInput : IExtraData
     [JsonPropertyName("disable-mix-mutants")]
     public bool? DisableMixMutants { get; init; }
 
+    [JsonPropertyName("homt-accelerate")]
+    public bool? HOMTAccelerate { get; init; }
+
+    [JsonPropertyName("homt-validate")]
+    public bool? HOMTValidate { get; init; }
+
     [JsonPropertyName("enable-higher-order-mutations")]
     public bool? EnableHigherOrderMutants { get; init; }
 

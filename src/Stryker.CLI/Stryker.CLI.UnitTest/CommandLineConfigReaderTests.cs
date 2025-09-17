@@ -31,10 +31,17 @@ public class CommandLineConfigReaderTests
     }
 
     [TestMethod]
-    public void ShouldHandleEnableHigherOrderMutants()
+    public void ShouldHandleHOMTAccelerate()
     {
-        _target.ReadCommandLineConfig(new[] { "--enable-higher-order-mutants" }, _app, _inputs);
-        _inputs.EnableHigherOrderMutantsInput.SuppliedInput.ShouldBe(true);
+        _target.ReadCommandLineConfig(new[] { "--homt-accelerate" }, _app, _inputs);
+        _inputs.HOMTAccelerateInput.SuppliedInput.ShouldBe(true);
+    }
+
+    [TestMethod]
+    public void ShouldHandleHOMTValidate()
+    {
+        _target.ReadCommandLineConfig(new[] { "--homt-validate" }, _app, _inputs);
+        _inputs.HOMTValidateInput.SuppliedInput.ShouldBe(true);
     }
 
     [TestMethod]

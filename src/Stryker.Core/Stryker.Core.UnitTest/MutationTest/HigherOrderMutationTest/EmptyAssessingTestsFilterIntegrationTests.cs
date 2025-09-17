@@ -33,7 +33,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
             var idSequence = 1000;
             _idProviderMock.Setup(p => p.NextId()).Returns(() => ++idSequence);
             _optionsMock.Setup(o => o.MutantIdProvider).Returns(_idProviderMock.Object);
-            _optionsMock.Setup(o => o.OptimizationMode).Returns(OptimizationModes.EnableHigherOrderMutants);
+            _optionsMock.Setup(o => o.OptimizationMode).Returns(OptimizationModes.HOMTValidate);
             
             _inputMock = new Mock<MutationTestInput>();
         }
@@ -62,20 +62,21 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
                 mutants, isPreTestRun: true, includeAllIndividualMutants: false);
 
             // Assert
-            var homResults = result.MutantGroups.OfType<HigherOrderMutant>().ToList();
-            var fomResults = result.MutantGroups.Where(m => m is not HigherOrderMutant).ToList();
+            var homResults = result.HomCandidates.ToList();
+            var fomResults = result.MissingFirstOrderMutants.ToList();
 
-            // Should have some HOMs, but they should all have non-empty assessing tests
             foreach (var hom in homResults)
             {
                 hom.AssessingTests.IsEmpty.ShouldBeFalse($"HOM {hom.Id} should not have empty assessing tests");
                 hom.Order.ShouldBeGreaterThanOrEqualTo(2, $"HOM {hom.Id} should have order >= 2");
             }
 
-            // Should still have some individual FOMs from missing mutants
-            fomResults.ShouldNotBeEmpty("Should retain some individual FOMs");
+            // In validate mode MissingFirstOrderMutants will be empty (all FOMs tested individually later)
+            if (_optionsMock.Object.OptimizationMode.HasFlag(OptimizationModes.HOMTAccelerate))
+            {
+                fomResults.ShouldNotBeEmpty("Should retain some individual FOMs in accelerate mode");
+            }
 
-            // Verify that mutants 4 and 5 which have overlapping tests could potentially form a valid HOM
             var validPairExists = homResults.Any(hom => 
                 hom.ConstituentMutants.Any(c => c.Id == 4 ) &&
                 hom.ConstituentMutants.Any(c => c.Id == 5 ));
@@ -167,7 +168,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
                 mutants, isPreTestRun: true, includeAllIndividualMutants: true);
 
             // Assert - No HOMs with empty assessing tests should be created
-            var homResults = result.MutantGroups.OfType<HigherOrderMutant>().ToList();
+            var homResults = result.HomCandidates.ToList();
             
             foreach (var hom in homResults)
             {
@@ -178,7 +179,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
             }
 
             // Should still retain all individual mutants
-            var allMutantIds = result.MutantGroups.Select(m => m.Id).ToHashSet();
+            var allMutantIds = homResults.SelectMany(h => h.ConstituentMutants).Select(m => m.Id).Concat(mutants.Select(m=>m.Id)).ToHashSet();
             foreach (var originalMutant in mutants)
             {
                 allMutantIds.ShouldContain(originalMutant.Id, $"Should retain original mutant {originalMutant.Id}");

@@ -45,6 +45,9 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
             // TODO: Register implemented search algorithms and heuristics here
         }
 
+        private bool IsValidateMode => _options.OptimizationMode.HasFlag(OptimizationModes.HOMTValidate);
+        private bool IsAccelerateMode => _options.OptimizationMode.HasFlag(OptimizationModes.HOMTAccelerate);
+
         /// <summary>
         /// Gets all HOM candidates that have been created.
         /// </summary>
@@ -202,62 +205,42 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
                 throw new ArgumentNullException(nameof(mutantsToTest));
             }
 
-            // Early return if HOM is not enabled
-            if (!_options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutants))
+            // Return if neither mode is active
+            if (!IsValidateMode && !IsAccelerateMode)
             {
-                _logger.LogDebug("Higher-Order Mutations not enabled, returning single mutant groups.");                
-                return new HOMGenerationResult(mutantsToTest, false, "None (HOM disabled)", 0, 0, mutantsToTest.Count, DateTime.Now - startTime);
+                _logger.LogDebug("HOMT disabled (no --homt-* flag). Skipping HOM generation.");
+                return new HOMGenerationResult([], Array.Empty<IMutant>(), false, "None (HOM disabled)", 0, DateTime.Now - startTime);
             }
+
+            var mode = IsValidateMode ? "Validate" : "Accelerate";
+            _logger.LogInformation("HOMT ({Mode} mode): Generating Higher-Order Mutants from {Count} FOMs (includeAllIndividualMutants={IncludeAllIndividuals}, includeMissingMutants={IncludeMissing})", mode, mutantsToTest.Count, includeAllIndividualMutants, includeMissingMutants);
 
             if (mutantsToTest.Count == 0)
             {
-                return new HOMGenerationResult([],false, "None (no mutants)", 0, 0, 0, DateTime.Now - startTime);
+                return new HOMGenerationResult(Array.Empty<HigherOrderMutant>(), Array.Empty<IMutant>(), false, "None (no mutants)", 0, DateTime.Now - startTime);
             }
             
             _logger.LogDebug("Building Higher-Order Mutants: {RunType} scenario with {MutantCount} mutants.",
                 isPreTestRun ? "Pre-test" : "Post-test", mutantsToTest.Count);
 
             // Generate HOM candidates with metadata tracking
-            var homCandidates = CreateCandidateHOMs(isPreTestRun, requireProperSubset);
-            var homCandidatesList = homCandidates.ToList();
-            
+            var homCandidatesEnumerable = CreateCandidateHOMs(isPreTestRun, requireProperSubset);
+            var homCandidatesList = homCandidatesEnumerable.ToList();
             _logger.LogInformation("Generated {HomCount} HOM candidates.", homCandidatesList.Count);
 
-            // Calculate mutant coverage
-            var mutantsInHOMs = homCandidatesList.SelectMany(h => h.ConstituentMutants).Distinct();
-            var mutantsMissing = mutantsToTest.Except(mutantsInHOMs).ToList();
+            var uniqueFomsInHoms = homCandidatesList.SelectMany(h => h.ConstituentMutants).Select(m => m.Id).Distinct().ToHashSet();
+            var missingFoms = mutantsToTest.Where(m => !uniqueFomsInHoms.Contains(m.Id)).Cast<IMutant>().ToList();
 
-            var mutantGroups = new List<IMutant>(homCandidatesList);
-
-            if (includeAllIndividualMutants)
-            {
-                _logger.LogDebug("Adding all mutants individually as well");
-                mutantGroups.AddRange(mutantsToTest);
-            }
-            else if (includeMissingMutants && mutantsMissing.Count > 0)
-            {
-                _logger.LogDebug("Adding {MissingCount} mutants not included in HOMs as separate test group.",
-                    mutantsMissing.Count);
-                mutantGroups.AddRange(mutantsMissing);
-            }
-
-            var endTime = DateTime.Now;
-            var generationTime = endTime - startTime;
-
-            _logger.LogInformation("Final HOM test plan: {GroupCount} HOMs covering {TotalMutants} mutants",
-                homCandidatesList.Count, mutantsInHOMs.Count());
-
+            var generationTime = DateTime.Now - startTime;
             var algorithmsUsed = string.Join(", ", _searchAlgorithms.Select(s => s.Name));
 
             return new HOMGenerationResult(
-                mutantGroups,
+                homCandidatesList,
+                IsValidateMode ? Array.Empty<IMutant>() : missingFoms,
                 isPreTestRun,
                 algorithmsUsed,
                 _heuristicRegistry?.RegisteredHeuristics.Count ?? 0,
-                mutantsInHOMs.Count(),
-                mutantsMissing.Count,
-                generationTime,
-                CreatedCandidates);
+                generationTime);
         }
 
         /// <summary>
@@ -311,7 +294,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
                 // Skip HOMs with empty assessing tests
                 if (candidate.AssessingTests?.IsEmpty ?? true)
                 {
-                    _logger.LogWarning("Filtered HOM candidate {CandidateOrder} with empty assessing tests - constituent FOMs have no overlapping test coverage", candidate.Order);
+                    _logger.LogDebug("Filtered HOM candidate (order {Order}) with empty assessing tests", candidate.Order);
                     continue;
                 }
 

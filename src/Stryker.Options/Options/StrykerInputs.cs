@@ -1,5 +1,6 @@
 using System.IO.Abstractions;
 using Stryker.Abstractions.Options.Inputs;
+using Stryker.Abstractions.Exceptions;
 using Stryker.Configuration;
 
 namespace Stryker.Abstractions.Options;
@@ -21,7 +22,8 @@ public interface IStrykerInputs
     DisableBailInput DisableBailInput { get; set; }
     DisableMixMutantsInput DisableMixMutantsInput { get; set; }
 
-    EnableHigherOrderMutantsInput EnableHigherOrderMutantsInput { get; set; }
+    HOMTAccelerateInput HOMTAccelerateInput { get; set; }
+    HOMTValidateInput HOMTValidateInput { get; set; }
 
     IgnoreMutationsInput IgnoreMutationsInput { get; init; }
     FallbackVersionInput FallbackVersionInput { get; init; }
@@ -106,7 +108,8 @@ public class StrykerInputs : IStrykerInputs
     public DisableBailInput DisableBailInput { get; set; } = new();
     public DisableMixMutantsInput DisableMixMutantsInput { get; set; } = new();
 
-    public EnableHigherOrderMutantsInput EnableHigherOrderMutantsInput { get; set; } = new();
+    public HOMTAccelerateInput HOMTAccelerateInput { get; set; } = new();
+    public HOMTValidateInput HOMTValidateInput { get; set; } = new();
     public MsBuildPathInput MsBuildPathInput { get; init; } = new();
     public OpenReportInput OpenReportInput { get; init; } = new();
     public OpenReportEnabledInput OpenReportEnabledInput { get; init; } = new();
@@ -123,6 +126,15 @@ public class StrykerInputs : IStrykerInputs
         var sinceEnabled = SinceInput.Validate(WithBaselineInput.SuppliedInput);
         var sinceTarget = SinceTargetInput.Validate(sinceEnabled);
         var projectVersion = ProjectVersionInput.Validate(reporters, withBaseline);
+
+        // Validate that HOMT flags are mutually exclusive
+        var homtAccelerate = HOMTAccelerateInput.Validate();
+        var homtValidate = HOMTValidateInput.Validate();
+        
+        if (homtAccelerate != OptimizationModes.None && homtValidate != OptimizationModes.None)
+        {
+            throw new InputException("--homt-accelerate and --homt-validate are mutually exclusive. Please specify only one.");
+        }
 
         _strykerOptionsCache ??= new StrykerOptions()
         {
@@ -155,7 +167,7 @@ public class StrykerInputs : IStrykerInputs
             IgnoredMethods = IgnoredMethodsInput.Validate(),
             Mutate = MutateInput.Validate(),
             LanguageVersion = LanguageVersionInput.Validate(),
-            OptimizationMode = CoverageAnalysisInput.Validate() | DisableBailInput.Validate() | DisableMixMutantsInput.Validate() | EnableHigherOrderMutantsInput.Validate(),
+            OptimizationMode = CoverageAnalysisInput.Validate() | DisableBailInput.Validate() | DisableMixMutantsInput.Validate() | homtAccelerate | homtValidate,
             TestProjects = TestProjectsInput.Validate(),
             TestCaseFilter = TestCaseFilterInput.Validate(),
             DashboardUrl = DashboardUrlInput.Validate(),

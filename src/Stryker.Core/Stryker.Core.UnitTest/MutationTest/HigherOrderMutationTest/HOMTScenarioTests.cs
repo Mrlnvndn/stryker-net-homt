@@ -39,7 +39,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
         public void Scenario_SameFileMultipleMutations_ShouldCreateValidHOMs()
         {
             // Arrange - Create mutants in the same file that should combine well
-            var options = CreateStrykerOptions(OptimizationModes.EnableHigherOrderMutants);
+            var options = CreateStrykerOptions(OptimizationModes.HOMTValidate);
             var input = CreateMutationTestInput();
             
             var mutantsInSameFile = new List<IMutant>
@@ -75,7 +75,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
         public void Scenario_DifferentFileMutations_ShouldBeFilteredByHeuristics()
         {
             // Arrange - Create mutants across different files
-            var options = CreateStrykerOptions(OptimizationModes.EnableHigherOrderMutants);
+            var options = CreateStrykerOptions(OptimizationModes.HOMTValidate);
             var input = CreateMutationTestInput();
             
             var mutantsInDifferentFiles = new List<IMutant>
@@ -115,7 +115,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
         public void Scenario_ConflictingMutations_ShouldBeRejected()
         {
             // Arrange - Create mutants that would conflict when combined
-            var options = CreateStrykerOptions(OptimizationModes.EnableHigherOrderMutants);
+            var options = CreateStrykerOptions(OptimizationModes.HOMTValidate);
             var input = CreateMutationTestInput();
             
             // Create a shared SyntaxNode to properly test SyntaxNodeConflictHeuristic
@@ -159,7 +159,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
         public void Scenario_SSHOMDetection_ShouldIdentifyStronglySubsumingMutants()
         {
             // Arrange - Create a scenario specifically for SSHOM detection
-            var options = CreateStrykerOptions(OptimizationModes.EnableHigherOrderMutants);
+            var options = CreateStrykerOptions(OptimizationModes.HOMTValidate);
             var input = CreateMutationTestInput();
             
             // Create FOMs with specific test coverage for SSHOM testing
@@ -193,7 +193,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
         public void Scenario_PerformanceWithVariousSizes_ShouldScaleReasonably()
         {
             // Arrange - Test performance scaling with different mutant set sizes
-            var options = CreateStrykerOptions(OptimizationModes.EnableHigherOrderMutants);
+            var options = CreateStrykerOptions(OptimizationModes.HOMTValidate);
             var input = CreateMutationTestInput();
             
             var smallSet = CreateMutantSet(10);
@@ -222,7 +222,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
         public void Scenario_HeuristicCombinations_ShouldProduceRefinedResults()
         {
             // Arrange - Test different heuristic combinations
-            var options = CreateStrykerOptions(OptimizationModes.EnableHigherOrderMutants);
+            var options = CreateStrykerOptions(OptimizationModes.HOMTValidate);
             var input = CreateMutationTestInput();
             var mutants = CreateMutantSet(20);
 
@@ -275,7 +275,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
         public void Scenario_RealWorldMutantDistribution_ShouldHandleRealisticPatterns()
         {
             // Arrange - Create a realistic distribution of mutants like what would be found in real code
-            var options = CreateStrykerOptions(OptimizationModes.EnableHigherOrderMutants);
+            var options = CreateStrykerOptions(OptimizationModes.HOMTValidate);
             var input = CreateMutationTestInput();
             
             var realisticMutants = new List<IMutant>();

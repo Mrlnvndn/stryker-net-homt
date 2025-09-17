@@ -293,9 +293,9 @@ namespace TestProject
 
             // Assert
             result.ShouldNotBeNull("Should return HOM generation result");
-            result.MutantGroups.ShouldNotBeEmpty("Should generate mutant groups");
+            result.HomCandidates.ShouldNotBeEmpty("Should generate HOM candidates");
             
-            var homGroups = result.MutantGroups.OfType<HigherOrderMutant>().ToList();
+            var homGroups = result.HomCandidates.ToList();
             homGroups.ShouldNotBeEmpty("Should contain Higher Order Mutants");
             
             // Validate that HOMs are properly structured
@@ -312,7 +312,7 @@ namespace TestProject
             // Validate result metadata
             result.AlgorithmUsed.ShouldNotBeNullOrEmpty("Should specify algorithm used");
             result.GenerationTime.ShouldBeGreaterThan(TimeSpan.Zero, "Should track generation time");
-            result.MutantsIncludedInHOMs.ShouldBeGreaterThan(0, "Should include some mutants in HOMs");
+            result.UniqueFomsInHoms.ShouldBeGreaterThan(0, "Should cover some mutants with HOMs");
 
             stopwatch.ElapsedMilliseconds.ShouldBeLessThan(10000, "Should complete within 10 seconds");
         }
@@ -340,7 +340,7 @@ namespace TestProject
                 performanceResults[size] = stopwatch.Elapsed;
 
                 // Basic validation
-                result.MutantGroups.ShouldNotBeEmpty($"Should generate groups for {size} mutants");
+                result.HomCandidates.ShouldNotBeEmpty($"Should generate candidates for {size} mutants");
             }
 
             // Assert - Performance should scale reasonably (not exponentially)
@@ -413,7 +413,7 @@ namespace TestProject
 
             return new StrykerOptions
             {
-                OptimizationMode = OptimizationModes.EnableHigherOrderMutants | OptimizationModes.CoverageBasedTest,
+                OptimizationMode = OptimizationModes.HOMTValidate | OptimizationModes.CoverageBasedTest,
                 Concurrency = 1,
                 MutationLevel = MutationLevel.Complete,
                 MutantIdProvider = mutantIdProvider.Object
@@ -490,15 +490,15 @@ namespace TestProject
         {
             // Basic result validation
             result.ShouldNotBeNull("HOM generation should return a result");
-            result.MutantGroups.ShouldNotBeEmpty("Should generate mutant groups");
+            result.HomCandidates.ShouldNotBeEmpty("Should generate HOM candidates");
             
             // Metadata validation
             result.AlgorithmUsed.ShouldNotBeNullOrEmpty("Should specify which algorithm was used");
             result.GenerationTime.ShouldBeGreaterThan(TimeSpan.Zero, "Should track generation time");
-            result.MutantsIncludedInHOMs.ShouldBeGreaterThan(0, "Should cover some mutants with HOMs");
+            result.UniqueFomsInHoms.ShouldBeGreaterThan(0, "Should cover some mutants with HOMs");
 
             // HOM validation
-            var homs = result.MutantGroups.OfType<HigherOrderMutant>().ToList();
+            var homs = result.HomCandidates.ToList();
             homs.ShouldNotBeEmpty("Should contain Higher Order Mutants");
 
             foreach (var hom in homs)
@@ -519,7 +519,7 @@ namespace TestProject
             }
 
             metrics.TotalHOMsGenerated = homs.Count;
-            metrics.MutantsCoveredByHOMs = result.MutantsIncludedInHOMs;
+            metrics.MutantsCoveredByHOMs = result.UniqueFomsInHoms;
         }
 
         private static void ValidateSSHOMCapabilities(HigherOrderMutation homt, List<IMutant> mutants)

@@ -179,10 +179,9 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
             // Act - Use reflection to call the private BuildHigherOrderMutants method
             var result = homt.BuildAndOptimizeHigherOrderMutants(mutants);
 
-            // Assert
-            var homGroups = result.MutantGroups;
+            var homGroups = result.HomCandidates;
             homGroups.ShouldNotBeEmpty("Should create HOM groups");
-            homGroups.Where(g => g is HigherOrderMutant).Cast<HigherOrderMutant>().Any(g => g.Order >= 2).ShouldBeTrue("Should have some higher-order mutant groups");
+            homGroups.Any(g => g.Order >= 2).ShouldBeTrue("Should have some higher-order mutant groups");
         }
 
         [TestMethod]
@@ -250,7 +249,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
 
             return new StrykerOptions
             {
-                OptimizationMode = withHOMT ? OptimizationModes.EnableHigherOrderMutants : OptimizationModes.CoverageBasedTest,
+                OptimizationMode = withHOMT ? OptimizationModes.HOMTValidate : OptimizationModes.CoverageBasedTest,
                 Concurrency = 1,
                 MutantIdProvider = mutantIdProvider.Object,
             };
@@ -293,7 +292,7 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest
 
         private bool ShouldUseHOMT(IStrykerOptions options)
         {
-            return options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutants);
+            return options.OptimizationMode.HasFlag(OptimizationModes.HOMTValidate);
         }
 
         #endregion

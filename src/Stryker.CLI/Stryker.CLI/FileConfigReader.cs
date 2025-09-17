@@ -46,7 +46,14 @@ public static class FileConfigReader
         inputs.DisableBailInput.SuppliedInput = config.DisableBail;
         inputs.DisableMixMutantsInput.SuppliedInput = config.DisableMixMutants;
 
-        inputs.EnableHigherOrderMutantsInput.SuppliedInput = config.EnableHigherOrderMutants;
+        inputs.HOMTAccelerateInput.SuppliedInput = config.HOMTAccelerate;
+        inputs.HOMTValidateInput.SuppliedInput = config.HOMTValidate;
+
+        // Handle the old EnableHigherOrderMutants config by mapping it to the new accelerate mode
+        if (config.EnableHigherOrderMutants == true && config.HOMTAccelerate != true && config.HOMTValidate != true)
+        {
+            inputs.HOMTAccelerateInput.SuppliedInput = true;
+        }
 
         inputs.AdditionalTimeoutInput.SuppliedInput = config.AdditionalTimeout;
         inputs.MutateInput.SuppliedInput = config.Mutate;

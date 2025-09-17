@@ -185,7 +185,8 @@ public class CommandLineConfigReader
         AddCliInput(inputs.VerbosityInput, "verbosity", "V");
         AddCliInput(inputs.ConcurrencyInput, "concurrency", "c", argumentHint: "number");
         AddCliInput(inputs.DisableBailInput, "disable-bail", null, optionType: CommandOptionType.NoValue);
-        AddCliInput(inputs.EnableHigherOrderMutantsInput, "enable-higher-order-mutants", null, optionType: CommandOptionType.NoValue);
+        AddCliInput(inputs.HOMTAccelerateInput, "homt-accelerate", null, optionType: CommandOptionType.NoValue);
+        AddCliInput(inputs.HOMTValidateInput, "homt-validate", null, optionType: CommandOptionType.NoValue);
 
         // Category: Build
         AddCliInput(inputs.SolutionInput, "solution", "s", argumentHint: "file-path", category: InputCategory.Build);

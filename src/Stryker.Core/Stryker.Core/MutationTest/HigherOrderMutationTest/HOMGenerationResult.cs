@@ -4,95 +4,58 @@ using System.Linq;
 using Stryker.Abstractions;
 using Stryker.Core.Mutants;
 
-namespace Stryker.Core.MutationTest.HigherOrderMutationTest
+namespace Stryker.Core.MutationTest.HigherOrderMutationTest;
+
+/// <summary>
+/// Result of Higher-Order Mutant generation with essential metadata.
+/// Contains only the data needed for subsequent planning to avoid recomputation.
+/// </summary>
+public class HOMGenerationResult(
+    IReadOnlyList<HigherOrderMutant> homCandidates,
+    IReadOnlyList<IMutant> missingFirstOrderMutants,
+    bool isPreTestRun,
+    string algorithmUsed,
+    int heuristicsUsed,
+    TimeSpan generationTime)
 {
     /// <summary>
-    /// Result of Higher-Order Mutant generation with metadata about the process.
+    /// Generated higher-order mutant candidates (HOMs).
     /// </summary>
-    public class HOMGenerationResult(
-        IEnumerable<IMutant> mutantGroups,
-        bool isPreTestRun,
-        string algorithmUsed,
-        int heuristicsUsed,
-        int mutantsIncludedInHOMs,
-        int mutantsMissingFromHOMs,
-        TimeSpan generationTime,
-        IEnumerable<HigherOrderMutant> candidatesCreated = null)
-    {
+    public IReadOnlyList<HigherOrderMutant> HomCandidates { get; } = homCandidates ?? Array.Empty<HigherOrderMutant>();
 
-        /// <summary>
-        /// The generated HOM groups ready for testing.
-        /// </summary>
-        public IReadOnlyList<IMutant> MutantGroups { get; } = [.. mutantGroups];
+    /// <summary>
+    /// Original FOMs that are not represented in any HOM (non-constituent FOMs).
+    /// In validate mode this will usually be empty because all FOMs are kept anyway.
+    /// </summary>
+    public IReadOnlyList<IMutant> MissingFirstOrderMutants { get; } = missingFirstOrderMutants ?? Array.Empty<IMutant>();
 
-        /// <summary>
-        /// The individual HOM candidates created during generation.
-        /// </summary>
-        public IReadOnlyList<HigherOrderMutant> CandidatesCreated { get; } = candidatesCreated?.ToList() ?? [];
+    /// <summary>
+    /// Whether this was a pre-test generation run.
+    /// </summary>
+    public bool IsPreTestRun { get; } = isPreTestRun;
 
-        /// <summary>
-        /// Whether this was a pre-test run (without killing test data) or post-test run (with killing test data).
-        /// </summary>
-        public bool IsPreTestRun { get; } = isPreTestRun;
+    /// <summary>
+    /// Name of the algorithm used to produce the candidates.
+    /// </summary>
+    public string AlgorithmUsed { get; } = algorithmUsed ?? "Unknown";
 
-        /// <summary>
-        /// The name of the algorithm used for HOM generation.
-        /// </summary>
-        public string AlgorithmUsed { get; } = algorithmUsed ?? "Unknown";
+    /// <summary>
+    /// Number of heuristics applied during generation.
+    /// </summary>
+    public int HeuristicsUsed { get; } = heuristicsUsed;
 
-        /// <summary>
-        /// The number of heuristics used during generation.
-        /// </summary>
-        public int HeuristicsUsed { get; } = heuristicsUsed;
+    /// <summary>
+    /// Total number of HOM candidates produced.
+    /// </summary>
+    public int CandidatesGenerated => HomCandidates.Count;
 
-        /// <summary>
-        /// The total number of HOM candidates generated before filtering.
-        /// </summary>
-        public int CandidatesGenerated => CandidatesCreated?.Count ?? 0;
+    /// <summary>
+    /// Time spent generating HOM candidates.
+    /// </summary>
+    public TimeSpan GenerationTime { get; } = generationTime;
 
-        /// <summary>
-        /// The number of mutants that were included in at least one HOM.
-        /// </summary>
-        public int MutantsIncludedInHOMs { get; } = mutantsIncludedInHOMs;
-
-        /// <summary>
-        /// The number of mutants that were not included in any HOM.
-        /// </summary>
-        public int MutantsMissingFromHOMs { get; } = mutantsMissingFromHOMs;
-
-        /// <summary>
-        /// The time taken to generate the HOMs.
-        /// </summary>
-        public TimeSpan GenerationTime { get; } = generationTime;
-
-        /// <summary>
-        /// Gets the total number of test groups (HOMs + missing mutants if included).
-        /// </summary>
-        public int TotalTestGroups => MutantGroups.Count;
-
-        /// <summary>
-        /// Gets the total number of mutants covered by the test plan.
-        /// </summary>
-        public int TotalMutantsCovered => MutantGroups.Where(h => h is HigherOrderMutant).Cast<HigherOrderMutant>().SelectMany(g => g.ConstituentMutants).Count() + MutantGroups.Count(h => !(h is HigherOrderMutant));
-
-        /// <summary>
-        /// Gets the average HOM size.
-        /// </summary>
-        public double AverageHOMSize => CandidatesCreated.Any() ? CandidatesCreated.Average(c => c.Order) : 0;
-
-        /// <summary>
-        /// Gets the efficiency ratio (mutants in HOMs vs total mutants).
-        /// </summary>
-        public double EfficiencyRatio => TotalMutantsCovered > 0 ? (double)MutantsIncludedInHOMs / TotalMutantsCovered : 0;
-
-        /// <summary>
-        /// Gets the tested HOM candidates.
-        /// </summary>
-        public IEnumerable<HigherOrderMutant> TestedCandidates => CandidatesCreated.Where(c => c.HasBeenTested);
-
-        /// <summary>
-        /// Gets the validated SSHOMs.
-        /// </summary>
-        public IEnumerable<HigherOrderMutant> ValidatedSSHOMs => CandidatesCreated.Where(c => c.IsValidatedSSHOM == true);
-    }
+    /// <summary>
+    /// Number of unique FOMs that appear in at least one HOM.
+    /// </summary>
+    public int UniqueFomsInHoms => HomCandidates.SelectMany(h => h.ConstituentMutants).Select(m => m.Id).Distinct().Count();
 }

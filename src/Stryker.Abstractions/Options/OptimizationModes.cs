@@ -12,5 +12,6 @@ public enum OptimizationModes
     DisableBail = 4,
     CaptureCoveragePerTest = 8,
     DisableMixMutants = 16,
-    EnableHigherOrderMutants = 32,
+    HOMTAccelerate = 32,
+    HOMTValidate = 64,
 }

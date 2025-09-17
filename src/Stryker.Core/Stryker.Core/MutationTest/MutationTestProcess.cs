@@ -115,14 +115,15 @@ public class MutationTestProcess : IMutationTestProcess
         IEnumerable<IMutant> firstAndHigherOrderMutants;
         IEnumerable<List<IMutant>> mutantGroups;
 
-        if (_options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutants))
+        if (_options.OptimizationMode.HasFlag(OptimizationModes.HOMTAccelerate) || 
+            _options.OptimizationMode.HasFlag(OptimizationModes.HOMTValidate))
         {
             firstAndHigherOrderMutants = BuildHigherOrderMutants(mutantsToTestList);
             var firstAndHigherOrderMutantsList = firstAndHigherOrderMutants.ToList();
             
             var homCount = firstAndHigherOrderMutantsList.OfType<HigherOrderMutant>().Count();
             var fomCount = firstAndHigherOrderMutantsList.Count - homCount;
-            Logger.LogInformation("HOMT: Generated {HOMCount} Higher-Order Mutants and retained {FOMCount} First-Order Mutants", 
+            Logger.LogInformation("HOMT: Final test set contains {HOMCount} Higher-Order Mutants and {FOMCount} First-Order Mutants", 
                 homCount, fomCount);
 
             // Check for potential duplicate FOMs across HOMs
@@ -174,9 +175,10 @@ public class MutationTestProcess : IMutationTestProcess
     {
         var testsFailingInitially = Input.InitialTestRun.Result.FailingTests.GetIdentifiers().ToHashSet();
         
-        // Force DisableBail when Higher Order Mutants are enabled to ensure complete killing test collection for SSHOM validation
+        // Force DisableBail when HOMTValidate is enabled to ensure complete killing test collection for SSHOM validation
+        // Allow early bail in HOMTAccelerate mode for performance testing
         var continueTestRun = _options.OptimizationMode.HasFlag(OptimizationModes.DisableBail) ||
-                              _options.OptimizationMode.HasFlag(OptimizationModes.EnableHigherOrderMutants);
+                              _options.OptimizationMode.HasFlag(OptimizationModes.HOMTValidate);
                               
         if (testsFailingInitially.Count > 0 && failedTests.GetIdentifiers().Any(id => testsFailingInitially.Contains(id)))
         {
@@ -355,66 +357,80 @@ public class MutationTestProcess : IMutationTestProcess
 
     private IEnumerable<IMutant> BuildHigherOrderMutants(IReadOnlyCollection<IMutant> mutantsToTest)
     {
-        Logger.LogInformation("HOMT: Starting Higher-Order Mutant generation for {FOMCount} First-Order Mutants", 
-            mutantsToTest.Count);
+        var isAccelerateMode = _options.OptimizationMode.HasFlag(OptimizationModes.HOMTAccelerate);
+        var isValidateMode = _options.OptimizationMode.HasFlag(OptimizationModes.HOMTValidate);
+
+        if (!isAccelerateMode && !isValidateMode)
+        {
+            // Fallback to accelerate mode if neither is explicitly set but HOM generation is somehow called
+            Logger.LogWarning("HOMT: Neither accelerate nor validate mode specified, defaulting to accelerate mode");
+            isAccelerateMode = true;
+        }
+
+        var modeDescription = isValidateMode ? "Validate" : "Accelerate";
+        Logger.LogInformation("HOMT: Starting Higher-Order Mutant generation in {Mode} mode for {FOMCount} First-Order Mutants", 
+            modeDescription, mutantsToTest.Count);
         
         // Create the HigherOrderMutation instance and delegate all logic to it
         var higherOrderMutation = new HigherOrderMutation(_options, Input, mutantsToTest);
-
-        // Add Algorithm to HigherOrderMutation instance
-        //var localSearchAlgorithm = new LocalSearchAlgorithm(Input, [],_options, mutantsToTest);
-        //higherOrderMutation.AddSearchAlgorithm(localSearchAlgorithm);
-        //Logger.LogDebug("HOMT: Registered LocalSearchAlgorithm for HOM generation");
-
-        //var geneticAlgorithm = new GeneticSearchAlgorithm(Input, null, _options, mutantsToTest, true);
-        //higherOrderMutation.AddSearchAlgorithm(geneticAlgorithm);
 
         var heuristics = new List<IHOMHeuristic>()
         {
             new EmptyAssessingTestsFilterHeuristic(),
             new MaxSizeLimitHeuristic(),
             new SyntaxNodeConflictHeuristic(),
-
             new CodeLocationHeuristic(),
             new MutatorTypeHeuristic(),
             new OverlappingTestsHeuristic(),
         };
 
-        var GeneticSearchAlgorithm = new GeneticSearchAlgorithm(Input, heuristics, _options, mutantsToTest);
-
-        var localSearchAlgorithmV2 = new LocalSearchAlgorithmV2(Input, heuristics, _options, mutantsToTest);
-
-        higherOrderMutation.AddSearchAlgorithm(GeneticSearchAlgorithm); 
+        var geneticSearchAlgorithm = new GeneticSearchAlgorithm(Input, heuristics, _options, mutantsToTest);
+        higherOrderMutation.AddSearchAlgorithm(geneticSearchAlgorithm); 
 
         Input.HigherOrderMutation = higherOrderMutation;
 
+        // In validate mode, include all individual mutants; in accelerate mode, filter out constituent FOMs
+        var includeAllIndividualMutants = isValidateMode;
+        
         var result = higherOrderMutation.BuildAndOptimizeHigherOrderMutants(
-            mutantsToTest, isPreTestRun: true, includeAllIndividualMutants: true
+            mutantsToTest, isPreTestRun: true, includeAllIndividualMutants: includeAllIndividualMutants
         );
 
-        // Log the metadata for debugging
-        Logger.LogInformation("HOMT: Generation completed - Algorithm: {AlgorithmUsed}, Candidates: {CandidatesGenerated}, " +
-                             "Heuristics: {HeuristicsUsed}, Time: {GenerationTime:F2}ms, Total Mutants: {TotalMutants}",
-            result.AlgorithmUsed, result.CandidatesGenerated, result.HeuristicsUsed, 
-            result.GenerationTime.TotalMilliseconds, result.MutantGroups.Count);
-            
-        // Log breakdown of mutant types
-        var homResults = result.MutantGroups.OfType<HigherOrderMutant>().ToList();
-        var fomResults = result.MutantGroups.Where(m => m is not HigherOrderMutant).ToList();
-        
-        Logger.LogInformation("HOMT: Generated {HOMCount} HOMs and retained {FOMCount} FOMs for testing", 
-            homResults.Count, fomResults.Count);
-            
-        if (homResults.Count > 0)
+        Logger.LogInformation("HOMT: Generation completed - Mode: {Mode}, Algorithm: {AlgorithmUsed}, HOM Candidates: {CandidatesGenerated}, Heuristics: {HeuristicsUsed}, Time: {GenerationTime:F2}ms",
+            modeDescription, result.AlgorithmUsed, result.CandidatesGenerated, result.HeuristicsUsed, result.GenerationTime.TotalMilliseconds);
+
+        var homResults = result.HomCandidates.ToList();
+        List<IMutant> fomResults;
+        if (isValidateMode)
         {
-            var orders = homResults.GroupBy(h => h.Order).OrderBy(g => g.Key);
-            foreach (var orderGroup in orders)
-            {
-                Logger.LogDebug("HOMT: {Count} HOMs of order {Order}", orderGroup.Count(), orderGroup.Key);
-            }
+            // validate mode => all original FOMs + HOMs
+            fomResults = [.. mutantsToTest.Where(m => m is not HigherOrderMutant).Cast<IMutant>()];
+        }
+        else
+        {
+            // accelerate mode => only non constituent FOMs provided by result
+            fomResults = [.. result.MissingFirstOrderMutants];
         }
 
-        return result.MutantGroups;
+        if (isAccelerateMode && !includeAllIndividualMutants)
+        {
+            var finalMutants = homResults.Cast<IMutant>().Concat(fomResults).ToList();
+            Logger.LogInformation("HOMT: Final test set - {HOMCount} HOMs + {FOMCount} non-constituent FOMs = {Total}", homResults.Count, fomResults.Count, finalMutants.Count);
+            return finalMutants;
+        }
+        else
+        {
+            Logger.LogInformation("HOMT: Validate mode - Testing {HOMCount} HOMs alongside {FOMCount} original FOMs", homResults.Count, fomResults.Count);
+            if (homResults.Count > 0)
+            {
+                var orders = homResults.GroupBy(h => h.Order).OrderBy(g => g.Key);
+                foreach (var orderGroup in orders)
+                {
+                    Logger.LogDebug("HOMT: {Count} HOMs of order {Order}", orderGroup.Count(), orderGroup.Key);
+                }
+            }
+            return homResults.Cast<IMutant>().Concat(fomResults).ToList();
+        }
     }
 
     private IEnumerable<List<IMutant>> BuildMutantGroupsForTest(IReadOnlyCollection<IMutant> mutantsNotRun)
