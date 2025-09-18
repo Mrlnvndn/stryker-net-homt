@@ -103,6 +103,9 @@ public class FileBasedInput : IExtraData
     [JsonPropertyName("break-on-initial-test-failure")]
     public bool? BreakOnInitialTestFailure { get; init; }
 
+    [JsonPropertyName("homt-algorithm")]
+    public string HOMTAlgorithm { get; init; }
+
     [JsonExtensionData]
     public Dictionary<string, JsonElement> ExtraData { get; init; }
 }

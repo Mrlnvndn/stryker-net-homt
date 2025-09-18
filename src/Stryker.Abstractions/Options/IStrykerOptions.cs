@@ -50,4 +50,5 @@ public interface IStrykerOptions
     bool WithBaseline { get; init; }
     string WorkingDirectory { get; init; }
     IProvideId MutantIdProvider { get; set; }
+    HOMTAlgorithmKind HOMTAlgorithm { get; init; }
 }

@@ -209,7 +209,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
             if (!IsValidateMode && !IsAccelerateMode)
             {
                 _logger.LogDebug("HOMT disabled (no --homt-* flag). Skipping HOM generation.");
-                return new HOMGenerationResult([], Array.Empty<IMutant>(), false, "None (HOM disabled)", 0, DateTime.Now - startTime);
+                return new HOMGenerationResult([], [], false, "None (HOM disabled)", 0, DateTime.Now - startTime);
             }
 
             var mode = IsValidateMode ? "Validate" : "Accelerate";
@@ -217,7 +217,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
 
             if (mutantsToTest.Count == 0)
             {
-                return new HOMGenerationResult(Array.Empty<HigherOrderMutant>(), Array.Empty<IMutant>(), false, "None (no mutants)", 0, DateTime.Now - startTime);
+                return new HOMGenerationResult([], [], false, "None (no mutants)", 0, DateTime.Now - startTime);
             }
             
             _logger.LogDebug("Building Higher-Order Mutants: {RunType} scenario with {MutantCount} mutants.",
@@ -260,53 +260,73 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
                 yield break;
             }
             
-            var selectedAlgorithm = _searchAlgorithms.FirstOrDefault();
-            if (selectedAlgorithm == null)
+            if (_searchAlgorithms.Count == 0)
             {
                 _logger.LogWarning("No HOM search algorithm specified and no default algorithm registered. Cannot create HOM candidates.");
                 yield break;
             }
-            _logger.LogInformation("Using default HOM search algorithm: {AlgorithmName}", selectedAlgorithm.Name);
+
+            if (_searchAlgorithms.Count == 1)
+            {
+                _logger.LogInformation("Using HOM search algorithm: {AlgorithmName}", _searchAlgorithms[0].Name);
+            }
+            else
+            {
+                var algos = string.Join(", ", _searchAlgorithms.Select(a => a.Name));
+                _logger.LogInformation("Using {AlgorithmCount} HOM search algorithms: {AlgorithmNames}", _searchAlgorithms.Count, algos);
+            }
 
             var runType = isPreTestRun ? "pre-test" : "post-test";
-
-            _logger.LogDebug("Generating {RunType} HOM candidates using {AlgorithmName} with {FOMCount} eligible FOMs and {HeuristicCount} heuristics.",
-                runType, selectedAlgorithm.Name, _allFirstOrderMutants.Count, _heuristics.Count);
+            _logger.LogDebug("Generating {RunType} HOM candidates from {FOMCount} eligible FOMs and {HeuristicCount} heuristics.",
+                runType, _allFirstOrderMutants.Count, _heuristics.Count);
 
             // Filter heuristics based on the run type
             var applicableHeuristics = FilterHeuristicsForRunType(_heuristics, isPreTestRun);
 
-            foreach (var candidate in selectedAlgorithm.GenerateCandidates(_allFirstOrderMutants, applicableHeuristics, _options, _input))
+            // Track duplicates across algorithms by constituent FOM ids key
+            var yieldedKeys = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var algorithm in _searchAlgorithms)
             {
-                // Skip null candidates
-                if (candidate == null)
+                _logger.LogDebug("Running HOM search algorithm: {AlgorithmName}", algorithm.Name);
+
+                foreach (var candidate in algorithm.GenerateCandidates(_allFirstOrderMutants, applicableHeuristics, _options, _input))
                 {
-                    continue;
+                    // Skip null candidates
+                    if (candidate == null)
+                    {
+                        continue;
+                    }
+
+                    // Skip FOMs (order 1) - we only want HOMs (order 2+)
+                    if (candidate.Order <= 1)
+                    {
+                        _logger.LogTrace("Search algorithm generated an invalid HOM");
+                        continue;
+                    }
+
+                    // Skip HOMs with empty assessing tests
+                    if (candidate.AssessingTests?.IsEmpty ?? true)
+                    {
+                        _logger.LogDebug("Filtered HOM candidate (order {Order}) with empty assessing tests", candidate.Order);
+                        continue;
+                    }
+
+                    var mutantIdsKey = string.Join(",", candidate.ConstituentMutants.OrderBy(m => m.Id).Select(m => m.Id));
+                    if (!yieldedKeys.Add(mutantIdsKey))
+                    {
+                        _logger.LogTrace("Skipping duplicate HOM candidate from {AlgorithmName}: [{Key}]", algorithm.Name, mutantIdsKey);
+                        continue;
+                    }
+
+                    // Assign ID and store candidate
+                    candidate.Id = _options.MutantIdProvider.NextId();            
+                    
+                    _homCandidates[candidate.Id] = candidate;
+                    _homCandidatesByMutantIds[mutantIdsKey] = candidate;
+
+                    yield return candidate;
                 }
-
-                // Skip FOMs (order 1) - we only want HOMs (order 2+)
-                if (candidate.Order <= 1)
-                {
-                    _logger.LogTrace("Search algorithm generated an invalid HOM");
-                    continue;
-                }
-
-                // Skip HOMs with empty assessing tests
-                if (candidate.AssessingTests?.IsEmpty ?? true)
-                {
-                    _logger.LogDebug("Filtered HOM candidate (order {Order}) with empty assessing tests", candidate.Order);
-                    continue;
-                }
-
-                // Assign ID and store candidate
-                candidate.Id = _options.MutantIdProvider.NextId();            
-                
-                _homCandidates[candidate.Id] = candidate;
-    
-                var mutantIdsKey = string.Join(",", candidate.ConstituentMutants.OrderBy(m => m.Id).Select(m => m.Id));
-                _homCandidatesByMutantIds[mutantIdsKey] = candidate;
-
-                yield return candidate;
             }
         }
 

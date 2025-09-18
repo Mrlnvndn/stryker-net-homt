@@ -187,6 +187,7 @@ public class CommandLineConfigReader
         AddCliInput(inputs.DisableBailInput, "disable-bail", null, optionType: CommandOptionType.NoValue);
         AddCliInput(inputs.HOMTAccelerateInput, "homt-accelerate", null, optionType: CommandOptionType.NoValue);
         AddCliInput(inputs.HOMTValidateInput, "homt-validate", null, optionType: CommandOptionType.NoValue);
+        AddCliInput(inputs.HOMTAlgorithmInput, "homt-algorithm", null, optionType: CommandOptionType.SingleValue);
 
         // Category: Build
         AddCliInput(inputs.SolutionInput, "solution", "s", argumentHint: "file-path", category: InputCategory.Build);

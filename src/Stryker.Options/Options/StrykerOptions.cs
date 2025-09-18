@@ -234,4 +234,8 @@ public class StrykerOptions : IStrykerOptions
 
     private readonly string _workingDirectoryField;
 
+    /// <summary>
+    /// The algorithm used for the HOMT (Hybrid Orthogonal Matching Pursuit) strategy.
+    /// </summary>
+    public HOMTAlgorithmKind HOMTAlgorithm { get; init; } = HOMTAlgorithmKind.Local;
 }

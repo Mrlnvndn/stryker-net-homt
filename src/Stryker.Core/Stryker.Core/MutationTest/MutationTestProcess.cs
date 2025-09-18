@@ -212,103 +212,7 @@ public class MutationTestProcess : IMutationTestProcess
         return continueTestRun;
     }
 
-    /// <summary>
-    /// Finds the parent HOM for a given FOM ID by checking all mutants in the current test group.
-    /// Uses interface-based checking instead of reflection for better performance and reliability.
-    /// </summary>
-    /// <param name="fomId">The FOM ID to find the parent for</param>
-    /// <param name="allMutants">All mutants in the current test group</param>
-    /// <returns>The parent HOM if found, null otherwise</returns>
-    private static HigherOrderMutant FindParentHOM(int fomId, IReadOnlyCollection<IMutant> allMutants)
-    {
-        var parentHom = allMutants.OfType<HigherOrderMutant>()
-                                 .FirstOrDefault(hom => hom.ConstituentMutants.Any(c => c.Id == fomId));
-        
-        if (parentHom != null)
-        {
-            Logger.LogTrace("HOMT: Found parent HOM {HOMId} for FOM {FOMId}", parentHom.Id, fomId);
-        }
-        
-        return parentHom;
-    }
-
-    private static IEnumerable<HigherOrderMutant> FindAllParentHOMs(int fomId, IReadOnlyCollection<IMutant> allMutants)
-    {
-        var parentHoms = allMutants.OfType<HigherOrderMutant>()
-                              .Where(hom => hom.ConstituentMutants.Any(c => c.Id == fomId));
     
-        Logger.LogTrace("HOMT: Found {ParentCount} parent HOMs for FOM {FOMId}", 
-            parentHoms.Count(), fomId);
-    
-        return parentHoms;
-    }
-
-    /// <summary>
-    /// Updates a HOM's status based on its constituent FOMs' results.
-    /// Uses interface-based checking and improved error handling.
-    /// </summary>
-    /// <param name="hom">The HOM to update</param>
-    /// <param name="failedTests">Tests that failed during this run</param>
-    /// <param name="ranTests">Tests that ran during this run</param>
-    /// <param name="timedOutTest">Tests that timed out during this run</param>
-    private static void UpdateHOMWithFOMResults(IMutant hom, ITestIdentifiers failedTests, ITestIdentifiers ranTests, ITestIdentifiers timedOutTest)
-    {
-        if (hom is not HigherOrderMutant higherOrderMutant)
-        {
-            Logger.LogWarning("HOMT: Expected HigherOrderMutant but got {Type} for mutant {Id}", hom.GetType().Name, hom.Id);
-            return;
-        }
-
-        var constituentsList = higherOrderMutant.ConstituentMutants.ToList();
-        var oldStatus = hom.ResultStatus;
-        
-        Logger.LogTrace("HOMT: Updating HOM {HOMId} (Order: {Order}) with {ConstituentCount} constituents. Current status: {CurrentStatus}", 
-            hom.Id, higherOrderMutant.Order, constituentsList.Count, oldStatus);
-        
-        // Log constituent statuses for debugging
-        var constituentStatuses = constituentsList.Select(f => $"{f.Id}:{f.ResultStatus}").ToList();
-        Logger.LogTrace("HOMT: Constituent FOMs statuses - {ConstituentStatuses}", string.Join(", ", constituentStatuses));
-        
-        // Strategy: HOM is killed if any constituent FOM is killed
-        if (constituentsList.Any(fom => fom.ResultStatus == MutantStatus.Killed))
-        {
-            hom.ResultStatus = MutantStatus.Killed;
-            // Merge killing tests from all killed FOMs
-            var killedFoms = constituentsList.Where(f => f.ResultStatus == MutantStatus.Killed).ToList();
-            var allKillingTests = killedFoms.Aggregate(TestIdentifierList.NoTest(), 
-                                                      (current, killedFom) => current.Merge(killedFom.KillingTests));
-            hom.KillingTests = allKillingTests;
-            
-            Logger.LogDebug("HOMT: HOM {HOMId} marked as KILLED - {KilledFOMCount}/{TotalFOMCount} constituent FOMs were killed", 
-                hom.Id, killedFoms.Count, constituentsList.Count);
-        }
-        else if (constituentsList.Any(fom => fom.ResultStatus == MutantStatus.Timeout))
-        {
-            hom.ResultStatus = MutantStatus.Timeout;
-            var timedOutFoms = constituentsList.Count(f => f.ResultStatus == MutantStatus.Timeout);
-            Logger.LogDebug("HOMT: HOM {HOMId} marked as TIMEOUT - {TimedOutFOMCount}/{TotalFOMCount} constituent FOMs timed out", 
-                hom.Id, timedOutFoms, constituentsList.Count);
-        }
-        else if (constituentsList.All(fom => fom.ResultStatus == MutantStatus.Survived))
-        {
-            hom.ResultStatus = MutantStatus.Survived;
-            Logger.LogDebug("HOMT: HOM {HOMId} marked as SURVIVED - all {TotalFOMCount} constituent FOMs survived", 
-                hom.Id, constituentsList.Count);
-        }
-        else
-        {
-            var pendingFoms = constituentsList.Count(f => f.ResultStatus == MutantStatus.Pending);
-            Logger.LogTrace("HOMT: HOM {HOMId} remains PENDING - {PendingFOMCount}/{TotalFOMCount} constituent FOMs still pending", 
-                hom.Id, pendingFoms, constituentsList.Count);
-        }
-        
-        if (oldStatus != hom.ResultStatus)
-        {
-            Logger.LogInformation("HOMT: HOM {HOMId} status updated: {OldStatus} -> {NewStatus}", 
-                hom.Id, oldStatus, hom.ResultStatus);
-        }
-    }
-
     private void OnMutantsTested(IEnumerable<IMutant> mutants, ISet<IMutant> reportedMutants)
     {
         foreach (var mutant in mutants)
@@ -355,7 +259,7 @@ public class MutationTestProcess : IMutationTestProcess
         return true;
     }
 
-    private IEnumerable<IMutant> BuildHigherOrderMutants(IReadOnlyCollection<IMutant> mutantsToTest)
+    private List<IMutant> BuildHigherOrderMutants(IReadOnlyCollection<IMutant> mutantsToTest)
     {
         var isAccelerateMode = _options.OptimizationMode.HasFlag(OptimizationModes.HOMTAccelerate);
         var isValidateMode = _options.OptimizationMode.HasFlag(OptimizationModes.HOMTValidate);
@@ -384,8 +288,19 @@ public class MutationTestProcess : IMutationTestProcess
             new OverlappingTestsHeuristic(),
         };
 
-        var geneticSearchAlgorithm = new GeneticSearchAlgorithm(Input, heuristics, _options, mutantsToTest);
-        higherOrderMutation.AddSearchAlgorithm(geneticSearchAlgorithm); 
+        switch (_options.HOMTAlgorithm)
+        {
+            case HOMTAlgorithmKind.Genetic:
+                higherOrderMutation.AddSearchAlgorithm(new GeneticSearchAlgorithm(Input, heuristics, _options, mutantsToTest));
+                break;
+            case HOMTAlgorithmKind.Local:
+                higherOrderMutation.AddSearchAlgorithm(new LocalSearchAlgorithmV2(Input, heuristics, _options, mutantsToTest));
+                break;
+            case HOMTAlgorithmKind.Both:
+                higherOrderMutation.AddSearchAlgorithm(new GeneticSearchAlgorithm(Input, heuristics, _options, mutantsToTest));
+                higherOrderMutation.AddSearchAlgorithm(new LocalSearchAlgorithmV2(Input, heuristics, _options, mutantsToTest));
+                break;
+        }
 
         Input.HigherOrderMutation = higherOrderMutation;
 
