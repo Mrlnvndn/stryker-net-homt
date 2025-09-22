@@ -25,6 +25,7 @@ public interface IStrykerInputs
     HOMTAccelerateInput HOMTAccelerateInput { get; set; }
     HOMTValidateInput HOMTValidateInput { get; set; }
     HOMTAlgorithmInput HOMTAlgorithmInput { get; set; }
+    HOMTHeuristicsInput HOMTHeuristicsInput { get; set; }
 
     IgnoreMutationsInput IgnoreMutationsInput { get; init; }
     FallbackVersionInput FallbackVersionInput { get; init; }
@@ -112,6 +113,7 @@ public class StrykerInputs : IStrykerInputs
     public HOMTAccelerateInput HOMTAccelerateInput { get; set; } = new();
     public HOMTValidateInput HOMTValidateInput { get; set; } = new();
     public HOMTAlgorithmInput HOMTAlgorithmInput { get; set; } = new();
+    public HOMTHeuristicsInput HOMTHeuristicsInput { get; set; } = new();
     public MsBuildPathInput MsBuildPathInput { get; init; } = new();
     public OpenReportInput OpenReportInput { get; init; } = new();
     public OpenReportEnabledInput OpenReportEnabledInput { get; init; } = new();
@@ -133,6 +135,7 @@ public class StrykerInputs : IStrykerInputs
         var homtAccelerate = HOMTAccelerateInput.Validate();
         var homtValidate = HOMTValidateInput.Validate();
         var homtAlgorithm = HOMTAlgorithmInput.Validate();
+        var homtHeuristics = HOMTHeuristicsInput.Validate();
 
         if (homtAccelerate != OptimizationModes.None && homtValidate != OptimizationModes.None)
         {
@@ -172,6 +175,7 @@ public class StrykerInputs : IStrykerInputs
             LanguageVersion = LanguageVersionInput.Validate(),
             OptimizationMode = CoverageAnalysisInput.Validate() | DisableBailInput.Validate() | DisableMixMutantsInput.Validate() | homtAccelerate | homtValidate,
             HOMTAlgorithm = homtAlgorithm,
+            HOMTHeuristics = homtHeuristics,
             TestProjects = TestProjectsInput.Validate(),
             TestCaseFilter = TestCaseFilterInput.Validate(),
             DashboardUrl = DashboardUrlInput.Validate(),

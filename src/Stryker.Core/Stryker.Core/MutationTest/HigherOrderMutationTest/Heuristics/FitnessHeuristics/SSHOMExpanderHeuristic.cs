@@ -106,7 +106,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
                 var isNewSSHOM = !_potentialSSHOMs.Any(s => CalculateSimilarity(s, currentCandidate) > 0.8);
                 if (isNewSSHOM)
                 {
-                    _potentialSSHOMs.Add(new List<IMutant>(currentCandidate));
+                    _potentialSSHOMs.Add([.. currentCandidate]);
                 }
             }
             

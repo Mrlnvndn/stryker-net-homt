@@ -5,3 +5,4 @@
 - always use expression body if the method is a single expression.
 - keep unit tests short and focused on a single behavior.
 - use the latest c# syntax
+- make methods and classes as static as possible

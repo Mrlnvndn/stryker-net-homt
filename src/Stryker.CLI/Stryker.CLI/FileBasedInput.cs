@@ -106,6 +106,9 @@ public class FileBasedInput : IExtraData
     [JsonPropertyName("homt-algorithm")]
     public string HOMTAlgorithm { get; init; }
 
+    [JsonPropertyName("homt-heuristics")]
+    public string[] HOMTHeuristics { get; init; }
+
     [JsonExtensionData]
     public Dictionary<string, JsonElement> ExtraData { get; init; }
 }

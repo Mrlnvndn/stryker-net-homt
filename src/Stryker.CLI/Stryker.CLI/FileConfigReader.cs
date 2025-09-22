@@ -49,6 +49,7 @@ public static class FileConfigReader
         inputs.HOMTAccelerateInput.SuppliedInput = config.HOMTAccelerate;
         inputs.HOMTValidateInput.SuppliedInput = config.HOMTValidate;
         inputs.HOMTAlgorithmInput.SuppliedInput = config.HOMTAlgorithm;
+        inputs.HOMTHeuristicsInput.SuppliedInput = config.HOMTHeuristics;
 
         // Handle the old EnableHigherOrderMutants config by mapping it to the new accelerate mode
         if (config.EnableHigherOrderMutants == true && config.HOMTAccelerate != true && config.HOMTValidate != true)

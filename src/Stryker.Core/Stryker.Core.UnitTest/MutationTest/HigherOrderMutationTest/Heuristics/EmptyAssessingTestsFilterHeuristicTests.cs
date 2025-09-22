@@ -17,14 +17,14 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Heuristics
     [TestClass]
     public class EmptyAssessingTestsFilterHeuristicTests : TestBase
     {
-        private EmptyAssessingTestsFilterHeuristic _heuristic;
+        private EmptyAssessingTestsHeuristic _heuristic;
         private Mock<IStrykerOptions> _optionsMock;
         private Mock<MutationTestInput> _inputMock;
 
         [TestInitialize]
         public void Setup()
         {
-            _heuristic = new EmptyAssessingTestsFilterHeuristic();
+            _heuristic = new EmptyAssessingTestsHeuristic();
             _optionsMock = new Mock<IStrykerOptions>();
             _inputMock = new Mock<MutationTestInput>();
         }

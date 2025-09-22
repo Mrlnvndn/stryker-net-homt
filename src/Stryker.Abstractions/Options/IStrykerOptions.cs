@@ -51,4 +51,5 @@ public interface IStrykerOptions
     string WorkingDirectory { get; init; }
     IProvideId MutantIdProvider { get; set; }
     HOMTAlgorithmKind HOMTAlgorithm { get; init; }
+    IEnumerable<HOMTHeuristicKind> HOMTHeuristics { get; }
 }

@@ -235,7 +235,12 @@ public class StrykerOptions : IStrykerOptions
     private readonly string _workingDirectoryField;
 
     /// <summary>
-    /// The algorithm used for the HOMT (Hybrid Orthogonal Matching Pursuit) strategy.
+    /// The algorithm used for the HOMT (Higher Order Mutation Testing) strategy.
     /// </summary>
     public HOMTAlgorithmKind HOMTAlgorithm { get; init; } = HOMTAlgorithmKind.Local;
+
+    /// <summary>
+    /// The heuristics used for the HOMT (Higher Order Mutation Testing) strategy.
+    /// </summary>
+    public IEnumerable<HOMTHeuristicKind> HOMTHeuristics { get; init; } = [HOMTHeuristicKind.CodeLocation, HOMTHeuristicKind.EmptyAssessingTests, HOMTHeuristicKind.MutatorType, HOMTHeuristicKind.MaxSizeLimit, HOMTHeuristicKind.OverlappingTests, HOMTHeuristicKind.SyntaxNodeConflict];
 }

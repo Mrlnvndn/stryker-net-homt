@@ -188,6 +188,7 @@ public class CommandLineConfigReader
         AddCliInput(inputs.HOMTAccelerateInput, "homt-accelerate", null, optionType: CommandOptionType.NoValue);
         AddCliInput(inputs.HOMTValidateInput, "homt-validate", null, optionType: CommandOptionType.NoValue);
         AddCliInput(inputs.HOMTAlgorithmInput, "homt-algorithm", null, optionType: CommandOptionType.SingleValue);
+        AddCliInput(inputs.HOMTHeuristicsInput, "homt-heuristics", null, optionType: CommandOptionType.MultipleValue, argumentHint: "heuristic-name");
 
         // Category: Build
         AddCliInput(inputs.SolutionInput, "solution", "s", argumentHint: "file-path", category: InputCategory.Build);

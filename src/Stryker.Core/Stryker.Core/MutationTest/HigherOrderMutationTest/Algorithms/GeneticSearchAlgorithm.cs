@@ -6,7 +6,6 @@ using Microsoft.Extensions.Logging;
 using Stryker.Abstractions;
 using Stryker.Abstractions.Options;
 using Stryker.Core.Mutants;
-using Stryker.Core.MutationTest;
 using Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics;
 using Stryker.Utilities.Logging;
 
@@ -21,33 +20,120 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
     {
         public string Name => "GeneticSearch";
 
-        private StrykerOptions _options;
+        /// <summary>
+        /// Random number generator for stochastic operations.
+        /// </summary>
         private readonly Random _random;
-        // contains the scores for candidates based on their key to avoid recalculating them
+        
+        /// <summary>
+        /// Contains the scores for candidates based on their key to avoid recalculating them.
+        /// </summary>
         private readonly Dictionary<string, double> _candidateScoreCache;
+        
+        /// <summary>
+        /// Cache mapping hash codes to candidate keys for performance optimization.
+        /// </summary>
         private readonly Dictionary<int, string> _idToKeyCache;
-        private List<IMutant> _bestCandidate;
+        
+        /// <summary>
+        /// The best candidate found during the search process.
+        /// </summary>
+        private List<IMutant> _bestCandidates;
+        
+        /// <summary>
+        /// Registry for accessing and using heuristics.
+        /// </summary>
         private readonly HeuristicRegistry _heuristicRegistry;
-        private readonly int _populationSize = 500; // Increased from 200
-        private readonly int _maxGenerations = 80; // Increased from 40
-        private readonly double _mutationRate = 0.25; // Increased from 0.18 for more diversity
+        
+        /// <summary>
+        /// Size of the population to maintain during evolution.
+        /// </summary>
+        private readonly int _populationSize = 500;
+        
+        /// <summary>
+        /// Maximum number of generations to evolve.
+        /// </summary>
+        private readonly int _maxGenerations = 80;
+        
+        /// <summary>
+        /// Probability of mutation occurring for each candidate.
+        /// </summary>
+        private readonly double _mutationRate = 0.25;
+        
+        /// <summary>
+        /// Probability of crossover occurring between parents.
+        /// </summary>
         private readonly double _crossoverRate = 0.75;
-        private readonly int _eliteCount = 12; // Increased from 4
-        private readonly int _tournamentSize = 3; // Increased from 2 for better selection pressure
-        private readonly int _maxOrder = 4; // Maximum number of FOMs in a HOM
+        
+        /// <summary>
+        /// Number of elite candidates to carry over to next generation.
+        /// </summary>
+        private readonly int _eliteCount = 12;
+        
+        /// <summary>
+        /// Size of tournament selection pool.
+        /// </summary>
+        private readonly int _tournamentSize = 3;
+        
+        /// <summary>
+        /// Maximum number of FOMs in a HOM.
+        /// </summary>
+        private readonly int _maxOrder = 4;
+        
+        /// <summary>
+        /// Whether to enforce uniqueness in the population.
+        /// </summary>
         private readonly bool _enforceUniqueness = true;
+        
+        /// <summary>
+        /// Logger for genetic search operations.
+        /// </summary>
         private readonly ILogger<GeneticSearchAlgorithm> _logger;
+        
+        /// <summary>
+        /// Whether to apply early filtering during population processing.
+        /// </summary>
         private readonly bool _earlyFiltering = false;
 
-        // More lenient configuration constants for dramatically better HOM generation
-        private const double HEURISTIC_POPULATION_RATIO = 0.3; // Reduced from 0.5 for more diversity
-        private const double DIVERSE_POPULATION_RATIO = 0.5; // Increased from 0.3 for more diversity
-        private const double EXPLOITATION_RATIO = 0.4; // Reduced from 0.7 for more exploration
-        private const double QUALITY_THRESHOLD_RATIO = 0.6; // Reduced from 0.9 to be much more lenient
-        private const int QUALITY_THRESHOLD_MIN_CANDIDATES = 3; // Reduced from 10
-        private const int MAX_SUGGESTIONS_PER_PAIR = 4; // Increased from 2
-        private const int MAX_NEIGHBOR_LIMIT = 20; // Increased from 10
-        private const double SCORE_MAINTENANCE_THRESHOLD = 0.5; // Reduced from 0.8 to be more lenient
+        /// <summary>
+        /// Ratio of population generated using heuristic guidance.
+        /// </summary>
+        private readonly double _heuristicPopulationRatio = 0.3;
+        
+        /// <summary>
+        /// Ratio of population generated using diverse seeding.
+        /// </summary>
+        private readonly double _diversePopulationRatio = 0.5;
+        
+        /// <summary>
+        /// Ratio of candidates selected for exploitation vs exploration.
+        /// </summary>
+        private readonly double _exploitationRatio = 0.4;
+        
+        /// <summary>
+        /// Quality threshold ratio for candidate selection.
+        /// </summary>
+        private readonly double _qualityThresholdRatio = 0.6;
+        
+        /// <summary>
+        /// Minimum number of candidates required for quality threshold calculation.
+        /// </summary>
+        private readonly int _qualityThresholdMinCandidates = 3;
+        
+        /// <summary>
+        /// Maximum number of suggestions to take per starting pair.
+        /// </summary>
+        private readonly int _maxSuggestionsPerPair = 4;
+        
+        /// <summary>
+        /// Maximum neighborhood limit for candidate generation.
+        /// </summary>
+        private readonly int _maxNeighbourhoodLimit = 20;
+        
+        /// <summary>
+        /// Score maintenance threshold for feature-based crossover.
+        /// </summary>
+        private readonly double _scoreMaintenanceThreshold = 0.5;
 
         public GeneticSearchAlgorithm(
             MutationTestInput mutationTestInput,
@@ -57,7 +143,6 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             bool registerAllHeuristics =false,
             bool earlyFiltering = false)
         {
-            _options = options as StrykerOptions ?? new StrykerOptions();
             _random = new Random();
             _candidateScoreCache = new Dictionary<string, double>();
             _idToKeyCache = new Dictionary<int, string>();
@@ -167,7 +252,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         /// </summary>
         private void LogSearchCompletion(GeneticSearchContext context)
         {
-            var bestScore = _bestCandidate == null ? 0 : _candidateScoreCache.GetValueOrDefault(CalculateCandidateKey(_bestCandidate));
+            var bestScore = _bestCandidates == null ? 0 : _candidateScoreCache.GetValueOrDefault(CalculateCandidateKey(_bestCandidates));
             _logger.LogInformation("GeneticSearch: Finished evolutionary loop. Total distinct candidates explored: {TotalDistinct} | Best score: {BestScore:F4}",
                 context.AllCandidateKeys.Count, bestScore);
         }
@@ -271,9 +356,9 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         {
             if (candidate == null) return;
             
-            if (_bestCandidate == null || score > _candidateScoreCache.GetValueOrDefault(CalculateCandidateKey(_bestCandidate)))
+            if (_bestCandidates == null || score > _candidateScoreCache.GetValueOrDefault(CalculateCandidateKey(_bestCandidates)))
             {
-                _bestCandidate = candidate;
+                _bestCandidates = candidate;
             }
         }
 
@@ -326,8 +411,8 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                 allEliteCandidates.Count, uniqueCandidates.Count, targetCount, baseTargetCount / 2);
 
             // Much more lenient quality threshold
-            var qualityThreshold = uniqueCandidates.Count > QUALITY_THRESHOLD_MIN_CANDIDATES 
-                ? uniqueCandidates[Math.Min(29, uniqueCandidates.Count - 1)].Score * QUALITY_THRESHOLD_RATIO // Use 30th percentile instead of 10th
+            var qualityThreshold = uniqueCandidates.Count > _qualityThresholdMinCandidates 
+                ? uniqueCandidates[Math.Min(29, uniqueCandidates.Count - 1)].Score * _qualityThresholdRatio // Use 30th percentile instead of 10th
                 : 0.3; // Lower fallback threshold
 
             var qualityCandidates = uniqueCandidates.Where(c => c.Score >= qualityThreshold).ToList();
@@ -339,7 +424,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             }
 
             // Phase 1: Exploitation (best scores) - reduced ratio for more exploration
-            var exploitationCount = (int)(targetCount * EXPLOITATION_RATIO);
+            var exploitationCount = (int)(targetCount * _exploitationRatio);
             var topCandidates = qualityCandidates.Take(exploitationCount);
             
             foreach (var candidate in topCandidates)
@@ -519,7 +604,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             var maxRetries = populationSize * 50;
             
             // Strategy 1: Heuristic-guided candidates (most intelligent approach)
-            var heuristicCount = (int)(populationSize * HEURISTIC_POPULATION_RATIO);
+            var heuristicCount = (int)(populationSize * _heuristicPopulationRatio);
             var heuristicCandidates = GenerateHeuristicGuidedCandidates(foms, heuristicCount);
             foreach (var candidate in heuristicCandidates)
             {
@@ -532,7 +617,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             }
             
             // Strategy 2: Diverse seeded initialization (simple diversity)
-            var seedCount = (int)(populationSize * DIVERSE_POPULATION_RATIO);
+            var seedCount = (int)(populationSize * _diversePopulationRatio);
             var diverseSeeds = GenerateDiverseSeeds(foms, seedCount, uniqueKeys);
             population.AddRange(diverseSeeds);
             
@@ -663,12 +748,12 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             if (searchGuidanceHeuristics?.Any() == true)
             {
                 // Start with basic pairs and let heuristics suggest expansions
-                var startingPairs = CreateBasicStartingPairs(foms, Math.Min(targetCount / 4, MAX_NEIGHBOR_LIMIT));
+                var startingPairs = CreateBasicStartingPairs(foms, Math.Min(targetCount / 4, _maxNeighbourhoodLimit));
                 
                 foreach (var startingPair in startingPairs)
                 {
                     var suggestions = _heuristicRegistry.SuggestNextCandidates(startingPair, foms);
-                    candidates.AddRange(suggestions.Take(MAX_SUGGESTIONS_PER_PAIR));
+                    candidates.AddRange(suggestions.Take(_maxSuggestionsPerPair));
                     
                     if (candidates.Count >= targetCount)
                     {
@@ -728,7 +813,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             
             for (var i = 0; i < fomsWithTests.Count && scoredPairs.Count < maxPairsToEvaluate; i++)
             {
-                var maxJForI = Math.Min(fomsWithTests.Count, i + MAX_NEIGHBOR_LIMIT);
+                var maxJForI = Math.Min(fomsWithTests.Count, i + _maxNeighbourhoodLimit);
                 for (var j = i + 1; j < maxJForI && scoredPairs.Count < maxPairsToEvaluate; j++)
                 {
                     var candidate = new List<IMutant> { fomsWithTests[i], fomsWithTests[j] };
@@ -1132,7 +1217,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                     
                     // Only add if it improves or maintains the score (using threshold)
                     if (child.Count == 0 || 
-                        _heuristicRegistry.ScoreCandidate(tempChild) >= _heuristicRegistry.ScoreCandidate(child) * SCORE_MAINTENANCE_THRESHOLD)
+                        _heuristicRegistry.ScoreCandidate(tempChild) >= _heuristicRegistry.ScoreCandidate(child) * _scoreMaintenanceThreshold)
                     {
                         child.Add(gene);
                     }

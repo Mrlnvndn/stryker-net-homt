@@ -171,7 +171,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         private void RegisterAllHeuristics()
         {
             RegisterHeuristic(new CodeLocationHeuristic());
-            RegisterHeuristic(new EmptyAssessingTestsFilterHeuristic());
+            RegisterHeuristic(new EmptyAssessingTestsHeuristic());
             RegisterHeuristic(new HardToKillHeuristic());
             RegisterHeuristic(new MaxSizeLimitHeuristic());
             RegisterHeuristic(new MutatorTypeHeuristic());

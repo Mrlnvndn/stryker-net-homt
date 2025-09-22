@@ -180,7 +180,7 @@ public class MutationTestProcess : IMutationTestProcess
         var continueTestRun = _options.OptimizationMode.HasFlag(OptimizationModes.DisableBail) ||
                               _options.OptimizationMode.HasFlag(OptimizationModes.HOMTValidate);
                               
-        if (testsFailingInitially.Count > 0 && failedTests.GetIdentifiers().Any(id => testsFailingInitially.Contains(id)))
+        if (testsFailingInitially.Count > 0 && failedTests.GetIdentifiers().Any(testsFailingInitially.Contains))
         {
             // some of the failing tests were failing without any mutation
             // we discard those tests
@@ -278,15 +278,8 @@ public class MutationTestProcess : IMutationTestProcess
         // Create the HigherOrderMutation instance and delegate all logic to it
         var higherOrderMutation = new HigherOrderMutation(_options, Input, mutantsToTest);
 
-        var heuristics = new List<IHOMHeuristic>()
-        {
-            new EmptyAssessingTestsFilterHeuristic(),
-            new MaxSizeLimitHeuristic(),
-            new SyntaxNodeConflictHeuristic(),
-            new CodeLocationHeuristic(),
-            new MutatorTypeHeuristic(),
-            new OverlappingTestsHeuristic(),
-        };
+        // Create heuristics based on options
+        var heuristics = CreateHeuristicsFromOptions(_options.HOMTHeuristics);
 
         switch (_options.HOMTAlgorithm)
         {
@@ -346,6 +339,35 @@ public class MutationTestProcess : IMutationTestProcess
             }
             return homResults.Cast<IMutant>().Concat(fomResults).ToList();
         }
+    }
+
+    /// <summary>
+    /// Creates heuristic instances based on the configured heuristic kinds.
+    /// </summary>
+    private static List<IHOMHeuristic> CreateHeuristicsFromOptions(IEnumerable<HOMTHeuristicKind> heuristicKinds)
+    {
+        var heuristics = new List<IHOMHeuristic>();
+        
+        foreach (var heuristicKind in heuristicKinds)
+        {
+            IHOMHeuristic heuristic = heuristicKind switch
+            {
+                HOMTHeuristicKind.CodeLocation => new CodeLocationHeuristic(),
+                HOMTHeuristicKind.EmptyAssessingTests => new EmptyAssessingTestsHeuristic(),
+                HOMTHeuristicKind.MutatorType => new MutatorTypeHeuristic(),
+                HOMTHeuristicKind.MaxSizeLimit => new MaxSizeLimitHeuristic(),
+                HOMTHeuristicKind.OverlappingTests => new OverlappingTestsHeuristic(),
+                HOMTHeuristicKind.SyntaxNodeConflict => new SyntaxNodeConflictHeuristic(),
+                _ => throw new ArgumentOutOfRangeException(nameof(heuristicKind), heuristicKind, "Unknown heuristic kind")
+            };
+            
+            heuristics.Add(heuristic);
+        }
+
+        Logger.LogInformation("HOMT: Using {Count} heuristics: {Heuristics}", 
+            heuristics.Count, string.Join(", ", heuristicKinds));
+            
+        return heuristics;
     }
 
     private IEnumerable<List<IMutant>> BuildMutantGroupsForTest(IReadOnlyCollection<IMutant> mutantsNotRun)

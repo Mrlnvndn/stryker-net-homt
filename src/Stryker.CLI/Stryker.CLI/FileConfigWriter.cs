@@ -67,6 +67,7 @@ public static class FileConfigGenerator
                 BreakOnInitialTestFailure = inputs.BreakOnInitialTestFailureInput.SuppliedInput ?? inputs.BreakOnInitialTestFailureInput.Default,
                 Concurrency = inputs.ConcurrencyInput.SuppliedInput ?? inputs.ConcurrencyInput.Default,
                 HOMTAlgorithm = inputs.HOMTAlgorithmInput.SuppliedInput ?? inputs.HOMTAlgorithmInput.Default,
+                HOMTHeuristics = inputs.HOMTHeuristicsInput.SuppliedInput?.ToArray() ?? inputs.HOMTHeuristicsInput.Default.ToArray(),
             }
         };
     }

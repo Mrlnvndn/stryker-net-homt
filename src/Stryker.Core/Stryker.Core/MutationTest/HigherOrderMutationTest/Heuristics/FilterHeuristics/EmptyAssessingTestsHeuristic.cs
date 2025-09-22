@@ -12,7 +12,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
     /// issues in the mutation testing process and duplicate warnings in VsTestRunner.
     /// This happens when constituent FOMs have no overlapping assessing tests (empty intersection).
     /// </summary>
-    public class EmptyAssessingTestsFilterHeuristic : BaseHOMHeuristic
+    public class EmptyAssessingTestsHeuristic : BaseHOMHeuristic
     {
         public override string Name => "EmptyAssessingTestsFilter";
         public override double Weight => 0.0; // Not used for scoring
