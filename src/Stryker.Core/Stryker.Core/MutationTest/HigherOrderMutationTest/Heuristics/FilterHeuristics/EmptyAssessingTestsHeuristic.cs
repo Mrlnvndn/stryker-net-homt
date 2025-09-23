@@ -15,7 +15,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
     public class EmptyAssessingTestsHeuristic : BaseHOMHeuristic
     {
         public override string Name => "EmptyAssessingTestsFilter";
-        public override double Weight => 0.0; // Not used for scoring
+        public override double Weight => 1; // Not used for scoring
         public override bool IsFilteringHeuristic => true;
         public override bool IsFitnessScoringHeuristic => false;
         public override bool IsSearchStrategyHeuristic => false;

@@ -126,26 +126,8 @@ public class MutationTestProcess : IMutationTestProcess
             Logger.LogInformation("HOMT: Final test set contains {HOMCount} Higher-Order Mutants and {FOMCount} First-Order Mutants", 
                 homCount, fomCount);
 
-            // Check for potential duplicate FOMs across HOMs
-            var allFomIds = new HashSet<int>();
-            var duplicateFomIds = new HashSet<int>();
-            
-            foreach (var hom in firstAndHigherOrderMutantsList.OfType<HigherOrderMutant>())
-            {
-                foreach (var fom in hom.ConstituentMutants)
-                {
-                    if (!allFomIds.Add(fom.Id))
-                    {
-                        duplicateFomIds.Add(fom.Id);
-                    }
-                }
-            }
-            
-            if (duplicateFomIds.Count > 0)
-            {
-                Logger.LogInformation("HOMT: Found {DuplicateFOMCount} FOMs shared between multiple HOMs: [{DuplicateIds}]", 
-                    duplicateFomIds.Count, string.Join(", ", duplicateFomIds.OrderBy(id => id)));
-            }
+            // Expose HOM context for reporters
+            HomMetricsCollector.HomContext = Input.HigherOrderMutation;
 
             mutantGroups = BuildMutantGroupsForTest(firstAndHigherOrderMutantsList);
         }
@@ -306,6 +288,9 @@ public class MutationTestProcess : IMutationTestProcess
 
         Logger.LogInformation("HOMT: Generation completed - Mode: {Mode}, Algorithm: {AlgorithmUsed}, HOM Candidates: {CandidatesGenerated}, Heuristics: {HeuristicsUsed}, Time: {GenerationTime:F2}ms",
             modeDescription, result.AlgorithmUsed, result.CandidatesGenerated, result.HeuristicsUsed, result.GenerationTime.TotalMilliseconds);
+
+        // expose generation result
+        HomMetricsCollector.GenerationResult = result;
 
         var homResults = result.HomCandidates.ToList();
         List<IMutant> fomResults;

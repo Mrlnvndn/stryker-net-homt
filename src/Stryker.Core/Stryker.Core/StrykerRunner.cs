@@ -110,6 +110,8 @@ public class StrykerRunner : IStrykerRunner
                 {
                     projectOrchestrator.Dispose();
                 }
+                stopwatch.Stop();
+                HomMetricsCollector.TotalRunDuration = stopwatch.Elapsed;
                 return new StrykerRunResult(options, rootComponent.GetMutationScore());
             }
 
@@ -142,6 +144,7 @@ public class StrykerRunner : IStrykerRunner
                     if (project.Input.HigherOrderMutation != null)
                     {
                         var analysisResult = project.Input.HigherOrderMutation.AnalyzeHOMsForSSHOMs();
+                        HomMetricsCollector.SshomAnalysis = analysisResult;
                         var summary = project.Input.HigherOrderMutation.GetSSHOMSummary();
 
                         _logger.LogInformation("Project {ProjectName}: Found {SSHOMCount} SSHOMs with {ValidationRate:P1} validation rate",
@@ -152,6 +155,8 @@ public class StrykerRunner : IStrykerRunner
                 }
             }
 
+            stopwatch.Stop();
+            HomMetricsCollector.TotalRunDuration = stopwatch.Elapsed;
             return new StrykerRunResult(options, rootComponent.GetMutationScore());
         }
 #if !DEBUG
