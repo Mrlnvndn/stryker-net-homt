@@ -263,17 +263,27 @@ public class MutationTestProcess : IMutationTestProcess
         // Create heuristics based on options
         var heuristics = CreateHeuristicsFromOptions(_options.HOMTHeuristics);
 
+        foreach (var heuristic in heuristics)
+        {
+            higherOrderMutation.AddHeuristic(heuristic);
+        }
+
+        // Generate a single random seed and pass it to all algorithms for reproducibility
+        var randomSeed = Math.Abs(Environment.TickCount);
+        HomMetricsCollector.RandomSeed = randomSeed;
+        Logger.LogInformation("HOMT: Using random seed {Seed} for algorithm initialization", randomSeed);
+
         switch (_options.HOMTAlgorithm)
         {
             case HOMTAlgorithmKind.Genetic:
-                higherOrderMutation.AddSearchAlgorithm(new GeneticSearchAlgorithm(Input, heuristics, _options, mutantsToTest));
+                higherOrderMutation.AddSearchAlgorithm(new GeneticSearchAlgorithm(Input, heuristics, _options, mutantsToTest, registerAllHeuristics: false, earlyFiltering: false, geneticOptions: new GeneticSearchOptions(RandomSeed: randomSeed)));
                 break;
             case HOMTAlgorithmKind.Local:
-                higherOrderMutation.AddSearchAlgorithm(new LocalSearchAlgorithmV2(Input, heuristics, _options, mutantsToTest));
+                higherOrderMutation.AddSearchAlgorithm(new LocalSearchAlgorithmV2(Input, heuristics, _options, mutantsToTest, registerAllHeuristics: false, randomSeed: randomSeed));
                 break;
             case HOMTAlgorithmKind.Both:
-                higherOrderMutation.AddSearchAlgorithm(new GeneticSearchAlgorithm(Input, heuristics, _options, mutantsToTest));
-                higherOrderMutation.AddSearchAlgorithm(new LocalSearchAlgorithmV2(Input, heuristics, _options, mutantsToTest));
+                higherOrderMutation.AddSearchAlgorithm(new GeneticSearchAlgorithm(Input, heuristics, _options, mutantsToTest, registerAllHeuristics: false, earlyFiltering: false, geneticOptions: new GeneticSearchOptions(RandomSeed: randomSeed)));
+                higherOrderMutation.AddSearchAlgorithm(new LocalSearchAlgorithmV2(Input, heuristics, _options, mutantsToTest, registerAllHeuristics: false, randomSeed: randomSeed));
                 break;
         }
 

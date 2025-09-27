@@ -34,7 +34,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
 
         public override bool ShouldFilterCandidate(List<IMutant> candidate)
         {
-            if (candidate == null || candidate.Count < 2)
+            if (candidate == null || candidate.Count < 1)
             {
                 return true; // Filter out null or too small candidates
             }

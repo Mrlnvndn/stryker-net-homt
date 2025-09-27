@@ -18,7 +18,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
     {
         public override string Name => "SyntaxNodeConflict";
         
-        public override double Weight => 0.0; // Not a scoring heuristic
+        public override double Weight => 1;
         
         public override bool IsFilteringHeuristic => true;
         

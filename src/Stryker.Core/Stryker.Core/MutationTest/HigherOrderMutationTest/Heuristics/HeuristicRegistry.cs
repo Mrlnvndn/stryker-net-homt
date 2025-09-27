@@ -20,7 +20,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
 
         private readonly MutationTestInput _mutationTestInput;
 
-        private IStrykerOptions _strykerOptions;
+        private readonly IStrykerOptions _strykerOptions;
 
         /// <summary>
         /// Gets the registered heuristics.
@@ -153,17 +153,17 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         /// <param name="currentCandidate">The current candidate HOM.</param>
         /// <param name="availableFOMs">Available first-order mutants to consider.</param>
         /// <returns>A list of suggested candidate HOMs to explore next.</returns>
-        public List<List<IMutant>> SuggestNextCandidates(List<IMutant> currentCandidate, IReadOnlyCollection<IMutant> availableFOMs)
-        {
-            var suggestions = new List<List<IMutant>>();
+        //public List<List<IMutant>> SuggestNextCandidates(List<IMutant> currentCandidate, IReadOnlyCollection<IMutant> availableFOMs)
+        //{
+        //    var suggestions = new List<List<IMutant>>();
             
-            foreach (var heuristic in GetSearchGuidanceHeuristics())
-            {
-                suggestions.AddRange(heuristic.SuggestNextCandidates(currentCandidate, availableFOMs));
-            }
+        //    foreach (var heuristic in GetSearchGuidanceHeuristics())
+        //    {
+        //        suggestions.AddRange(heuristic.SuggestNextCandidates(currentCandidate, availableFOMs));
+        //    }
             
-            return suggestions;
-        }
+        //    return suggestions;
+        //}
         
         /// <summary>
         /// Registers the default set of heuristics.

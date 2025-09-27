@@ -33,7 +33,8 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
         public HigherOrderMutation(
             IStrykerOptions options,
             MutationTestInput input, // Provides context like initial test run results
-            IReadOnlyCollection<IMutant> firstOrderMutants)
+            IReadOnlyCollection<IMutant> firstOrderMutants,
+            IEnumerable<IHOMHeuristic> heuristics = null)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
             _input = input ?? throw new ArgumentNullException(nameof(input));
@@ -42,6 +43,13 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
 
             _heuristicRegistry = new HeuristicRegistry(_allFirstOrderMutants, _options, _input, false);
 
+            if(heuristics != null)
+            {
+                foreach (var heuristic in heuristics)
+                {
+                    AddHeuristic(heuristic);
+                }
+            }           
             // TODO: Register implemented search algorithms and heuristics here
         }
 
@@ -209,7 +217,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
             if (!IsValidateMode && !IsAccelerateMode)
             {
                 _logger.LogDebug("HOMT disabled (no --homt-* flag). Skipping HOM generation.");
-                return new HOMGenerationResult([], [], false, "None (HOM disabled)", 0, DateTime.Now - startTime);
+                return new HOMGenerationResult([], [], false, "None (HOM disabled)", 0, DateTime.Now - startTime, []);
             }
 
             var mode = IsValidateMode ? "Validate" : "Accelerate";
@@ -217,7 +225,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
 
             if (mutantsToTest.Count == 0)
             {
-                return new HOMGenerationResult([], [], false, "None (no mutants)", 0, DateTime.Now - startTime);
+                return new HOMGenerationResult([], [], false, "None (no mutants)", 0, DateTime.Now - startTime, []);
             }
             
             _logger.LogDebug("Building Higher-Order Mutants: {RunType} scenario with {MutantCount} mutants.",
@@ -239,9 +247,13 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
                 IsValidateMode ? Array.Empty<IMutant>() : missingFoms,
                 isPreTestRun,
                 algorithmsUsed,
-                _heuristicRegistry?.RegisteredHeuristics.Count ?? 0,
-                generationTime);
+                _heuristicRegistry.RegisteredHeuristics.Count,
+                generationTime,
+                _algorithmStatsForLastRun);
         }
+
+        // Storage for per-algorithm stats from the last CreateCandidateHOMs run
+        private List<HOMGenerationAlgorithmStats> _algorithmStatsForLastRun = [];
 
         /// <summary>
         /// Creates candidate Higher-Order Mutants (HOMs) using a specified search algorithm.
@@ -252,14 +264,14 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
         /// <param name="validateSSHOM">Whether to validate potential SSHOMs using killing test data (only applicable for post-test runs).</param>
         /// <param name="requireProperSubset">When validating SSHOMs, whether to require a proper subset (stricter) or allow equal sets.</param>
         /// <returns>An enumerable of HigherOrderMutant candidates.</returns>
-        public IEnumerable<HigherOrderMutant> CreateCandidateHOMs( bool isPreTestRun = false, bool requireProperSubset = false)
+        public IEnumerable<HigherOrderMutant> CreateCandidateHOMs(bool isPreTestRun = false, bool requireProperSubset = false)
         {
             if (!_allFirstOrderMutants.Any())
             {
                 _logger.LogInformation("No first-order mutants available to create HOM candidates.");
                 yield break;
             }
-            
+
             if (_searchAlgorithms.Count == 0)
             {
                 _logger.LogWarning("No HOM search algorithm specified and no default algorithm registered. Cannot create HOM candidates.");
@@ -280,56 +292,126 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest
             _logger.LogDebug("Generating {RunType} HOM candidates from {FOMCount} eligible FOMs and {HeuristicCount} heuristics.",
                 runType, _allFirstOrderMutants.Count, _heuristics.Count);
 
-            // Filter heuristics based on the run type
-            var applicableHeuristics = FilterHeuristicsForRunType(_heuristics, isPreTestRun);
+            // Reset stats for this run
+            _algorithmStatsForLastRun = new List<HOMGenerationAlgorithmStats>();
 
-            // Track duplicates across algorithms by constituent FOM ids key
-            var yieldedKeys = new HashSet<string>(StringComparer.Ordinal);
+            // Track duplicates ACROSS algorithms by constituent FOM ids key
+            var yieldedKeysAcrossAlgorithms = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var algorithm in _searchAlgorithms)
             {
                 _logger.LogDebug("Running HOM search algorithm: {AlgorithmName}", algorithm.Name);
 
-                foreach (var candidate in algorithm.GenerateCandidates(_allFirstOrderMutants, applicableHeuristics, _options, _input))
+                var candidates = algorithm
+                    .GenerateCandidates(_allFirstOrderMutants, _heuristics, _options, _input)
+                    .ToList();
+
+                _logger.LogInformation(
+                    "Algorithm {AlgorithmName} generated {CandidateCount} raw HOM candidates.",
+                    algorithm.Name, candidates.Count);
+
+                var filteredEmptyAssessing = 0;
+                var filteredInvalidOrder = 0;
+                var duplicateWithinAlgorithm = 0;
+                var duplicateAcrossAlgorithms = 0;
+                var kept = 0;
+
+                // Track duplicates WITHIN the current algorithm
+                var localKeysThisAlgorithm = new HashSet<string>(StringComparer.Ordinal);
+
+                // Gather score metrics from yielded candidates for this algorithm
+                double? highestScore = null, lowestScore = null, avgScore = null, medianScore = null;
+                var scores = new List<double>();
+
+                foreach (var candidate in candidates)
                 {
-                    // Skip null candidates
                     if (candidate == null)
                     {
                         continue;
                     }
 
-                    // Skip FOMs (order 1) - we only want HOMs (order 2+)
                     if (candidate.Order <= 1)
                     {
-                        _logger.LogTrace("Search algorithm generated an invalid HOM");
+                        filteredInvalidOrder++;
                         continue;
                     }
 
-                    // Skip HOMs with empty assessing tests
                     if (candidate.AssessingTests?.IsEmpty ?? true)
                     {
-                        _logger.LogDebug("Filtered HOM candidate (order {Order}) with empty assessing tests", candidate.Order);
+                        filteredEmptyAssessing++;
                         continue;
                     }
 
                     var mutantIdsKey = string.Join(",", candidate.ConstituentMutants.OrderBy(m => m.Id).Select(m => m.Id));
-                    if (!yieldedKeys.Add(mutantIdsKey))
+
+                    // First detect duplicates produced within the same algorithm run
+                    if (!localKeysThisAlgorithm.Add(mutantIdsKey))
                     {
-                        _logger.LogTrace("Skipping duplicate HOM candidate from {AlgorithmName}: [{Key}]", algorithm.Name, mutantIdsKey);
+                        duplicateWithinAlgorithm++;
                         continue;
                     }
 
-                    // Assign ID and store candidate
-                    candidate.Id = _options.MutantIdProvider.NextId();            
-                    
+                    // Then detect duplicates already yielded by prior algorithms
+                    if (!yieldedKeysAcrossAlgorithms.Add(mutantIdsKey))
+                    {
+                        duplicateAcrossAlgorithms++;
+                        continue;
+                    }
+
+                    candidate.Id = _options.MutantIdProvider.NextId();
                     _homCandidates[candidate.Id] = candidate;
                     _homCandidatesByMutantIds[mutantIdsKey] = candidate;
+                    kept++;
+
+                    // record score if available
+                    if (candidate.PredictedScore.HasValue)
+                    {
+                        scores.Add(candidate.PredictedScore.Value);
+                    }
 
                     yield return candidate;
                 }
+
+                if (scores.Count > 0)
+                {
+                    highestScore = scores.Max();
+                    lowestScore = scores.Min();
+                    avgScore = scores.Average();
+
+                    // Compute median correctly
+                    scores.Sort(); // in-place O(n log n)
+                    var n = scores.Count;
+                    if ((n & 1) == 1)
+                    {
+                        medianScore = scores[n / 2];
+                    }
+                    else
+                    {
+                        var r = n / 2;
+                        medianScore = (scores[r - 1] + scores[r]) / 2.0;
+                    }
+
+                    _logger.LogInformation(
+                    "Algorithm {AlgorithmName}: kept={Kept}, dupWithinAlgorithm={DupWithin}, dupAcrossAlgorithms={DupAcross}, emptyAssessing={Empty}, invalidOrder={Invalid}",
+                    algorithm.Name, kept, duplicateWithinAlgorithm, duplicateAcrossAlgorithms, filteredEmptyAssessing, filteredInvalidOrder);
+
+                    _algorithmStatsForLastRun.Add(new HOMGenerationAlgorithmStats
+                    {
+                        AlgorithmName = algorithm.Name,
+                        RawCandidates = candidates.Count,
+                        Kept = kept,
+                        DuplicateWithinAlgorithm = duplicateWithinAlgorithm,
+                        DuplicateAcrossAlgorithms = duplicateAcrossAlgorithms,
+                        FilteredEmptyAssessing = filteredEmptyAssessing,
+                        FilteredInvalidOrder = filteredInvalidOrder,
+                        HighestScore = highestScore,
+                        LowestScore = lowestScore,
+                        AverageScore = avgScore,
+                        MedianScore = medianScore
+                    });
+                }
             }
         }
-
         /// <summary>
         /// Checks if a tested Higher-Order Mutant (HOM) is a Strongly Subsuming HOM (SSHOM).
         /// A HOM is strongly subsuming if its set of killing tests is a non-empty proper subset

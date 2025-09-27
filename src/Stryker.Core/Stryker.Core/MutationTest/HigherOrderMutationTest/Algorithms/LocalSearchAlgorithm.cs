@@ -194,22 +194,6 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                 initialCandidates.Add(new List<IMutant> { fom1, fom2 });
             }
             
-            // Use heuristic suggestions as additional starting points
-            foreach (var fom in fomList.Take(5)) // Take a few FOMs as seed candidates
-            {
-                var suggestedCandidates = heuristicRegistry.SuggestNextCandidates(
-                    new List<IMutant> { fom }, 
-                    availableFOMs);
-                
-                initialCandidates.AddRange(suggestedCandidates);
-                
-                // Limit the number of initial candidates
-                if (initialCandidates.Count >= _candidatePoolSize)
-                {
-                    break;
-                }
-            }
-            
             return initialCandidates.Take(_candidatePoolSize).ToList();
         }
         
@@ -225,11 +209,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             IReadOnlyCollection<IMutant> availableFOMs,
             HeuristicRegistry heuristicRegistry)
         {
-            var neighbors = new List<List<IMutant>>();
-            
-            // Get heuristic suggestions first (most intelligent approach)
-            var suggestedNeighbors = heuristicRegistry.SuggestNextCandidates(candidate, availableFOMs);
-            neighbors.AddRange(suggestedNeighbors);
+            var neighbors = new List<List<IMutant>>();         
             
             // If we don't have enough suggestions, perform systematic neighborhood exploration
             if (neighbors.Count < 5)

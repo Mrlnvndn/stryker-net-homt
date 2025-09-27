@@ -49,12 +49,12 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
             {
                 if(IsExpressionRemoval(mutant as Mutant))
                 {
-                    totalScore += 1.0;
+                    totalScore += 0.5;
                     continue;
                 }
                 if(IsRelationalOrEqualityReplacement(mutant as Mutant))
                 {
-                    totalScore += 1.0;
+                    totalScore += 0.5;
                     continue;
                 }               
             }          

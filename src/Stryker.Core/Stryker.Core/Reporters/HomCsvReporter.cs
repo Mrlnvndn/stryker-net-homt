@@ -55,14 +55,23 @@ public class HomCsvReporter : IReporter
         var generation = HomMetricsCollector.GenerationResult;
         var analysis = HomMetricsCollector.SshomAnalysis;
         var totalRunDuration = HomMetricsCollector.TotalRunDuration;
+        var randomSeed = HomMetricsCollector.RandomSeed;
 
         int totalHoms = 0, hom2 = 0, hom3 = 0, hom4 = 0;
-        double sshomRate = 0.0;
+        var sshomRate = 0.0;
         int sshom2 = 0, sshom3 = 0, sshom4 = 0;
-        double homGenerationMs = 0.0;
-        string usedAlgorithms = string.Empty;
-        string usedHeuristics = string.Join("|", (_options.HOMTHeuristics ?? Array.Empty<HOMTHeuristicKind>()).Select(h => h.ToString()));
-        double totalTestMs = totalRunDuration.TotalMilliseconds;
+        var homGenerationMs = 0.0;
+        var usedAlgorithms = string.Empty;
+        var usedHeuristics = string.Join("|", (_options.HOMTHeuristics ?? Array.Empty<HOMTHeuristicKind>()).Select(h => h.ToString()));
+        var totalTestMs = totalRunDuration.TotalMilliseconds;
+
+        // Aggregated per-algorithm stats from CreateCandidateHOMs
+        var rawCandidatesTotal = 0;
+        var dupWithinTotal = 0;
+        var dupAcrossTotal = 0;
+        var filteredEmptyTotal = 0;
+        var filteredInvalidTotal = 0;
+        var perAlgorithmStats = string.Empty;
 
         if (homContext is not null)
         {
@@ -87,6 +96,18 @@ public class HomCsvReporter : IReporter
             {
                 homGenerationMs = generation.GenerationTime.TotalMilliseconds;
                 usedAlgorithms = generation.AlgorithmUsed;
+
+                if (generation.AlgorithmStats is not null && generation.AlgorithmStats.Count > 0)
+                {
+                    rawCandidatesTotal = generation.AlgorithmStats.Sum(s => s.RawCandidates);
+                    dupWithinTotal = generation.AlgorithmStats.Sum(s => s.DuplicateWithinAlgorithm);
+                    dupAcrossTotal = generation.AlgorithmStats.Sum(s => s.DuplicateAcrossAlgorithms);
+                    filteredEmptyTotal = generation.AlgorithmStats.Sum(s => s.FilteredEmptyAssessing);
+                    filteredInvalidTotal = generation.AlgorithmStats.Sum(s => s.FilteredInvalidOrder);
+
+                    perAlgorithmStats = string.Join("|", generation.AlgorithmStats.Select(s =>
+                        $"{s.AlgorithmName}:raw={s.RawCandidates};kept={s.Kept};dupWithin={s.DuplicateWithinAlgorithm};dupAcross={s.DuplicateAcrossAlgorithms};empty={s.FilteredEmptyAssessing};invalid={s.FilteredInvalidOrder};highest={(s.HighestScore.HasValue ? s.HighestScore.Value.ToString("F4", CultureInfo.InvariantCulture) : string.Empty)};lowest={(s.LowestScore.HasValue ? s.LowestScore.Value.ToString("F4", CultureInfo.InvariantCulture) : string.Empty)};avg={(s.AverageScore.HasValue ? s.AverageScore.Value.ToString("F4", CultureInfo.InvariantCulture) : string.Empty)};median={(s.MedianScore.HasValue ? s.MedianScore.Value.ToString("F4", CultureInfo.InvariantCulture) : string.Empty)}"));
+                }
             }
             else
             {
@@ -106,7 +127,7 @@ public class HomCsvReporter : IReporter
 
         if (writeHeader)
         {
-            writer.WriteLine("total_homs,hom_2,hom_3,hom_4,sshom_rate_percent,sshom_2,sshom_3,sshom_4,hom_generation_ms,used_algorithms,used_heuristics,total_test_duration_ms,mutation_score_percent");
+            writer.WriteLine("total_homs,hom_2,hom_3,hom_4,sshom_rate_percent,sshom_2,sshom_3,sshom_4,hom_generation_ms,used_algorithms,used_heuristics,total_test_duration_ms,mutation_score_percent,raw_candidates_total,dup_within_total,dup_across_total,filtered_empty_total,filtered_invalid_total,per_algorithm_stats,random_seed");
         }
 
         var fields = new[]
@@ -123,7 +144,14 @@ public class HomCsvReporter : IReporter
             Escape(usedAlgorithms),
             Escape(usedHeuristics),
             totalTestMs.ToString("F2", CultureInfo.InvariantCulture),
-            (double.IsNaN(mutationScore) ? 0.0 : mutationScore * 100.0).ToString("F2", CultureInfo.InvariantCulture)
+            (double.IsNaN(mutationScore) ? 0.0 : mutationScore * 100.0).ToString("F2", CultureInfo.InvariantCulture),
+            rawCandidatesTotal.ToString(CultureInfo.InvariantCulture),
+            dupWithinTotal.ToString(CultureInfo.InvariantCulture),
+            dupAcrossTotal.ToString(CultureInfo.InvariantCulture),
+            filteredEmptyTotal.ToString(CultureInfo.InvariantCulture),
+            filteredInvalidTotal.ToString(CultureInfo.InvariantCulture),
+            Escape(perAlgorithmStats),
+            (randomSeed.HasValue ? randomSeed.Value.ToString(CultureInfo.InvariantCulture) : string.Empty)
         };
         writer.WriteLine(string.Join(",", fields));
 

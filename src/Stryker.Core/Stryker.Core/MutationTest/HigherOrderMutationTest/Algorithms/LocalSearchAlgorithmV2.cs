@@ -13,6 +13,37 @@ using Stryker.Utilities.Logging;
 namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
 {
     /// <summary>
+    /// Local search configuration (parity with GeneticSearchOptions).
+    /// </summary>
+    public record LocalSearchOptions(
+        int MaxIterations = 10,
+        int TargetCandidateCount = 500,
+        int MaxOrder = 4,
+        int MaxNeighbors = 10,
+        int NeighborGenerationCap = 15,
+        int TopAdditions = 5,
+        int TopRemovals = 5,
+        int TopSwaps = 5,
+        int SwapPositionsToTry = 2,
+        double RemovalThresholdMultiplier = 0.7,
+        double SwapMaintainThreshold = 0.8,
+        double QualityThresholdEarly = 0.6,
+        double QualityThresholdLate = 0.4,
+        double NeighborExploitationRatio = 0.7,
+        double TopCandidateFraction = 0.35,
+        double RandomCandidateFraction = 0.15,
+        int CriticalFilterDivisor = 4,
+        int FallbackTakeMin = 5,
+        int FallbackTakeDivisor = 4,
+        int InitialPairsPerSeed = 3,
+        double FinalSelectionPercentage = 0.4,
+        int MinFinalCandidates = 20,
+        int MaxFinalCandidates = 500,
+        double FinalSelectionFomFactor = 0.10,
+        int? RandomSeed = null
+    );
+
+    /// <summary>
     /// Implements a SSHOM-focused local search algorithm for finding Higher-Order Mutants (HOMs).
     /// This algorithm uses predictive heuristics to estimate the likelihood of creating 
     /// Strongly Subsuming Higher-Order Mutants (SSHOMs).
@@ -39,100 +70,11 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         /// </summary>
         private readonly HeuristicRegistry _heuristicRegistry;
 
-        /// <summary>
-        /// The maximum number of iterations for local search.
-        /// </summary>
-        private readonly int _maxIterations = 10;
+        // Options backing fields
+        private readonly LocalSearchOptions _opts;
 
-        /// <summary>
-        /// The maximum size of the candidate pool to maintain.
-        /// </summary>
-        private readonly int _candidatePoolSize = 100;
-
-        /// <summary>
-        /// The maximum order (number of FOMs) to consider in HOMs.
-        /// </summary>
-        private readonly int _maxOrder = 4;
-
-        /// <summary>
-        /// Final selection cap per neighborhood.
-        /// </summary>
-        private readonly int _maxNeighbors = 10;
-        
-        /// <summary>
-        /// Upper cap of generated neighbors before selection.
-        /// </summary>
-        private readonly int _neighborGenerationCap = 15;
-        
-        /// <summary>
-        /// Top-K additions to consider.
-        /// </summary>
-        private readonly int _topAdditions = 5;
-        
-        /// <summary>
-        /// Top-K removals to consider.
-        /// </summary>
-        private readonly int _topRemovals = 5;
-        
-        /// <summary>
-        /// Top-K swaps to consider.
-        /// </summary>
-        private readonly int _topSwaps = 5;
-        
-        /// <summary>
-        /// How many positions to try swapping.
-        /// </summary>
-        private readonly int _swapPositionsToTry = 2;
-        
-        /// <summary>
-        /// Relative score threshold for removal.
-        /// </summary>
-        private readonly double _removalThresholdMultiplier = 0.7;
-        
-        /// <summary>
-        /// Relative score threshold to keep a swap.
-        /// </summary>
-        private readonly double _swapMaintainThreshold = 0.8;
-        
-        /// <summary>
-        /// Yield threshold in early iterations.
-        /// </summary>
-        private readonly double _qualityThresholdEarly = 0.6;
-        
-        /// <summary>
-        /// Yield threshold in later iterations.
-        /// </summary>
-        private readonly double _qualityThresholdLate = 0.4;
-        
-        /// <summary>
-        /// Proportion of top neighbors to keep before diversity.
-        /// </summary>
-        private readonly double _neighborExploitationRatio = 0.7;
-        
-        /// <summary>
-        /// Fraction of pool used as "top" each iteration.
-        /// </summary>
-        private readonly double _topCandidateFraction = 0.5;
-        
-        /// <summary>
-        /// Divisor for critical filter fallback.
-        /// </summary>
-        private readonly int _criticalFilterDivisor = 4;
-        
-        /// <summary>
-        /// Minimum fallback kept candidates.
-        /// </summary>
-        private readonly int _fallbackTakeMin = 5;
-        
-        /// <summary>
-        /// Divisor for fallback kept candidates.
-        /// </summary>
-        private readonly int _fallbackTakeDivisor = 4;
-        
-        /// <summary>
-        /// Number of top pairs taken per seed FOM.
-        /// </summary>
-        private readonly int _initialPairsPerSeed = 3;
+        private List<ScoredCandidate> _allCandidates;
+        private int _availableFomsCount;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="LocalSearchAlgorithmV2"/> class.
@@ -141,17 +83,25 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         /// <param name="heuristics">A list of heuristics to guide the search.</param>
         /// <param name="options">Stryker options.</param>
         /// <param name="availableMutants">Available mutants for selection.</param>
+        /// <param name="registerAllHeuristics">Whether to register built-in heuristics like Genetic.</param>
+        /// <param name="randomSeed">Optional seed for deterministic comparisons (overrides LocalSearchOptions.RandomSeed).</param>
+        /// <param name="localOptions">Local search options to configure the algorithm.</param>
         public LocalSearchAlgorithmV2(
             MutationTestInput mutationTestInput,
             IList<IHOMHeuristic> heuristics,
             IStrykerOptions options,
-            IReadOnlyCollection<IMutant> availableMutants)
+            IReadOnlyCollection<IMutant> availableMutants,
+            bool registerAllHeuristics = false,
+            int? randomSeed = null,
+            LocalSearchOptions localOptions = null)
         {
-            _random = new Random();
+            _opts = localOptions ?? new LocalSearchOptions();
+            var seed = randomSeed ?? _opts.RandomSeed;
+            _random = seed.HasValue ? new Random(seed.Value) : new Random();
             _logger = ApplicationLogging.LoggerFactory.CreateLogger<LocalSearchAlgorithmV2>();
 
-            // Initialize heuristic registry with all available heuristics but without default heuristics
-            _heuristicRegistry = new HeuristicRegistry(availableMutants, options, mutationTestInput, registerAllHeuristics: false);
+            // Initialize heuristic registry with parity to Genetic via registerAllHeuristics flag
+            _heuristicRegistry = new HeuristicRegistry(availableMutants, options, mutationTestInput, registerAllHeuristics);
 
             // Register the provided heuristics if not null
             if (heuristics != null)
@@ -165,6 +115,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
 
         /// <summary>
         /// Generates candidate Higher-Order Mutants (HOMs) using SSHOM-focused local search.
+        /// Collects all candidates during the search and yields only the best candidates at the end.
         /// </summary>
         /// <param name="availableFOMs">The pool of FOMs to select from.</param>
         /// <param name="heuristics">A list of heuristics that guide the search.</param>
@@ -183,14 +134,16 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                 _heuristicRegistry.RegisterHeuristic(heuristic);
             }
 
-            // Track generated candidates to avoid duplicates
+            // Track all generated candidates with their scores
+            _allCandidates = new List<ScoredCandidate>();
+            _availableFomsCount = availableFOMs?.Count ?? 0;
+
             var generatedCandidates = new HashSet<string>(StringComparer.Ordinal);
-            var yieldedCount = 0;
 
             _logger.LogDebug("Starting SSHOM-focused LocalSearchV2 with {FOMCount} FOMs", availableFOMs.Count);
 
             // Initialize with SSHOM-targeted starting points
-            var scoredCandidatePool = InitializeMultiOrderSSHOMStartingPoints(availableFOMs, _heuristicRegistry);
+            var scoredCandidatePool = InitializeMultiOrderSSHOMStartingPoints(availableFOMs, _heuristicRegistry).OrderByDescending(s => s.Score).ToList();
 
             if (scoredCandidatePool.Count == 0)
             {
@@ -200,20 +153,18 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
 
             _logger.LogDebug("Generated {StartingPoolSize} initial SSHOM-targeted candidates", scoredCandidatePool.Count);
 
-            // Yield high-quality initial candidates
-            foreach (var scoredCandidate in scoredCandidatePool.ToList()) // ToList to avoid modification during iteration
+            // Collect initial candidates that pass quality checks
+            foreach (var scoredCandidate in scoredCandidatePool.ToList()) 
             {
                 var candidateKey = GetCandidateKey(scoredCandidate.Candidate);
-                if (generatedCandidates.Add(candidateKey) &&
-                    ShouldYieldCandidate(scoredCandidate.Candidate, 0, _heuristicRegistry))
+                if (generatedCandidates.Add(candidateKey))
                 {
-                    yield return new HigherOrderMutant(scoredCandidate.Candidate, Name);
-                    yieldedCount++;
+                    _allCandidates.Add(scoredCandidate);
                 }
             }
 
-            // Adaptive search loop focusing on SSHOM potential
-            for (var iteration = 0; iteration < _maxIterations && yieldedCount < _candidatePoolSize; iteration++)
+            // Search loop - always run for full iterations to explore the search space completely
+            for (var iteration = 0; iteration < _opts.MaxIterations; iteration++)
             {
                 if (scoredCandidatePool.Count == 0)
                 {
@@ -224,15 +175,20 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                 var newScoredCandidates = new List<ScoredCandidate>();
 
                 // Explore neighborhoods of top SSHOM candidates
-                var topCount = Math.Max(1, (int)Math.Round(scoredCandidatePool.Count * _topCandidateFraction));
+                var topCount = Math.Max(1, (int)Math.Round(scoredCandidatePool.Count * _opts.TopCandidateFraction));
+
+                var randomCount = Math.Max(1, (int)Math.Round(scoredCandidatePool.Count * _opts.RandomCandidateFraction));
+
                 var topScoredCandidates = scoredCandidatePool.Take(topCount);
-                foreach (var scoredCandidate in topScoredCandidates)
+                var randomScoredCandidates = scoredCandidatePool.Skip(topCount).OrderBy(_ => _random.Next()).Take(randomCount);
+
+                foreach (var scoredCandidate in topScoredCandidates.Concat(randomScoredCandidates))
                 {
                     var neighbors = ExploreSSHOMTargetedNeighborhood(scoredCandidate, availableFOMs, _heuristicRegistry);
                     newScoredCandidates.AddRange(neighbors);
                 }
 
-                // Process new candidates with adaptive filtering
+                // Collect new candidates that pass quality checks
                 var survivingNewCandidates = 0;
                 foreach (var newScoredCandidate in newScoredCandidates)
                 {
@@ -242,26 +198,67 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                     {
                         scoredCandidatePool.Add(newScoredCandidate);
 
-                        // Apply adaptive filtering based on iteration using generic scoring
-                        if (!_heuristicRegistry.ShouldFilterCandidate(newScoredCandidate.Candidate) &&
-                            ShouldYieldCandidate(newScoredCandidate.Candidate, iteration, _heuristicRegistry))
+                        // Collect candidates that pass filtering and quality checks
+                        if (!_heuristicRegistry.ShouldFilterCandidate(newScoredCandidate.Candidate))
                         {
-                            yield return new HigherOrderMutant(newScoredCandidate.Candidate, Name);
-                            yieldedCount++;
+                            _allCandidates.Add(newScoredCandidate);
                             survivingNewCandidates++;
                         }
                     }
                 }
 
-                _logger.LogTrace("Iteration {Iteration}: Generated {NewCandidates} new candidates, yielded {Surviving}",
+                _logger.LogTrace("Iteration {Iteration}: Generated {NewCandidates} new candidates, collected {Surviving}",
                     iteration, newScoredCandidates.Count, survivingNewCandidates);
 
-                // Rerank and prune the candidate pool to maintain manageable size
-                scoredCandidatePool = scoredCandidatePool.OrderByDescending(scp => scp.Score).Take(_candidatePoolSize).ToList();
+                // Rerank and prune the candidate pool to maintain manageable size during search
+                scoredCandidatePool = [.. scoredCandidatePool.OrderByDescending(scp => scp.Score).Take(_opts.TargetCandidateCount)];
             }
 
-            _logger.LogInformation("LocalSearchV2 completed: Yielded {YieldedCount} SSHOM candidates in {Iterations} iterations",
-                yieldedCount, Math.Min(_maxIterations, yieldedCount >= _candidatePoolSize ? yieldedCount : _maxIterations));
+            // Final selection: yield the best candidates using standardized selection
+            var finalCandidates = StandardizedFinalSelection(_allCandidates);
+            
+            _logger.LogInformation("LocalSearchV2 completed: Collected {TotalCandidates} candidates, yielding top {YieldedCount} after {Iterations} iterations",
+                _allCandidates.Count, finalCandidates.Count, _opts.MaxIterations);
+
+            foreach (var candidate in finalCandidates)
+            {
+                yield return new HigherOrderMutant(candidate.Candidate, Name, predictedScore: candidate.Score);
+            }
+        }
+
+        /// <summary>
+        /// Standardized final selection logic shared with GeneticSearch for fair comparison.
+        /// </summary>
+        private List<ScoredCandidate> StandardizedFinalSelection(List<ScoredCandidate> allCandidates)
+        {
+            if (allCandidates.Count == 0)
+            {
+                return allCandidates;
+            }
+
+            var allUniqueCandidates = allCandidates
+                .GroupBy(c => GetCandidateKey(c.Candidate))
+                .Select(g => g.OrderByDescending(c => c.Score).First())
+                .ToList();
+
+            _logger.LogInformation(
+                "LocalSearchV2: from {Total} candidates, {Unique} are unique",
+                allCandidates.Count, allUniqueCandidates.Count);
+
+            var sortedCandidates = allUniqueCandidates.OrderByDescending(c => c.Score).ToList();
+
+            //var byPercentage = (int)Math.Ceiling(sortedCandidates.Count * _opts.FinalSelectionPercentage);
+            var byFoms = (int)Math.Ceiling(_availableFomsCount * _opts.FinalSelectionFomFactor);
+
+            var targetCount = Math.Max(_opts.MinFinalCandidates, byFoms);
+            
+            var finalCandidates = sortedCandidates.Take(targetCount).ToList();
+
+            _logger.LogInformation(
+                "LocalSearchV2: Selected {FinalCount} candidates from {TotalCount} collected using standardized selection. Lowest score: {lowestscore}, highers score: {highestScore}",
+                finalCandidates.Count, sortedCandidates.Count, finalCandidates.Last().Score, finalCandidates.First().Score);
+
+            return finalCandidates;
         }
 
         /// <summary>
@@ -315,7 +312,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         {
             var scoredCandidates = new List<ScoredCandidate>();
 
-            for (var i = 0; i < killableFOMs.Count && scoredCandidates.Count < _candidatePoolSize; i++)
+            for (var i = 0; i < killableFOMs.Count && scoredCandidates.Count < _opts.TargetCandidateCount; i++)
             {
                 var fom1 = killableFOMs[i];
 
@@ -325,7 +322,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                     .Select(fom2 => new ScoredCandidate([fom1, fom2], heuristicRegistry.ScoreCandidate([fom1, fom2])));
 
                 // Take top-N most promising pairs
-                scoredCandidates.AddRange(scoredCompatibleFOMs.OrderByDescending(sc => sc.Score).Take(_initialPairsPerSeed));
+                scoredCandidates.AddRange(scoredCompatibleFOMs.OrderByDescending(sc => sc.Score).Take(_opts.InitialPairsPerSeed));
             }
 
             _logger.LogDebug("Created {PairCount} SSHOM-targeted pairs", scoredCandidates.Count);
@@ -348,15 +345,15 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             var criticalFiltered = candidates.Where(c => !heuristicRegistry.ShouldFilterCandidate(c.Candidate)).ToList();
 
             // If we lost too many candidates, fall back to best scored candidates using generic scoring
-            if (criticalFiltered.Count < Math.Max(2, candidates.Count / _criticalFilterDivisor))
+            if (criticalFiltered.Count < Math.Max(2, candidates.Count / _opts.CriticalFilterDivisor))
             {
                 _logger.LogDebug("Critical filtering too aggressive, using score-based selection");
                 return [.. candidates
                     .OrderByDescending(c => c.Score)
-                    .Take(Math.Max(_fallbackTakeMin, _candidatePoolSize / _fallbackTakeDivisor))];
+                    .Take(Math.Max(_opts.FallbackTakeMin, _opts.TargetCandidateCount / _opts.FallbackTakeDivisor))];
             }
 
-            return [.. criticalFiltered.Take(_candidatePoolSize)];
+            return [.. criticalFiltered.Take(_opts.TargetCandidateCount)];
         }
 
         /// <summary>
@@ -375,10 +372,9 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             var availableStrategies = new List<Action>();
 
             // Addition strategy (if not at max order)
-            if (candidate.Candidate.Count < _maxOrder)
-            {
-                availableStrategies.Add(() => neighbors.AddRange(GenerateAdditionNeighbors(candidate, availableFOMs, heuristicRegistry)));
-            }
+
+            availableStrategies.Add(() => neighbors.AddRange(GenerateAdditionNeighbors(candidate, availableFOMs, heuristicRegistry)));
+            
 
             // Removal strategy (if we have more than 2 mutants to maintain HOM validity)
             if (candidate.Candidate.Count > 2)
@@ -399,16 +395,16 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             foreach (var strategy in shuffledStrategies)
             {
                 strategy();
-                if (neighbors.Count >= _neighborGenerationCap)
+                if (neighbors.Count >= _opts.NeighborGenerationCap)
                 {
-                    break; // Generate more for better selection
+                    break;
                 }
             }
 
             // Hybrid selection: Balance exploitation with exploration
-            if (neighbors.Count > _maxNeighbors)
+            if (neighbors.Count > _opts.MaxNeighbors)
             {
-                return SelectBestNeighborsWithDiversity(neighbors, _maxNeighbors);
+                return SelectBestNeighborsWithDiversity(neighbors, _opts.MaxNeighbors);
             }
 
             return neighbors;
@@ -431,7 +427,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             var sortedNeighbors = neighbors.OrderByDescending(n => n.Score).ToList();
 
             // Strategy: exploitation (best scores) + exploration (diversity)
-            var exploitationCount = (int)(maxCount * _neighborExploitationRatio);
+            var exploitationCount = (int)(maxCount * _opts.NeighborExploitationRatio);
             exploitationCount = Math.Clamp(exploitationCount, 0, maxCount);
             var explorationCount = maxCount - exploitationCount;
 
@@ -463,7 +459,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             var neighbors = new List<ScoredCandidate>();
 
             // Only add if we're below max order
-            if (candidate.Candidate.Count < _maxOrder)
+            if (candidate.Candidate.Count < _opts.MaxOrder)
             {
                 // Create a set of existing FOM IDs for quick lookup
                 var existingFomIds = new HashSet<int>(candidate.Candidate.Select(m => m.Id));
@@ -477,7 +473,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                         return new ScoredCandidate(newCandidate, score);
                     })
                     .OrderByDescending(x => x.Score)
-                    .Take(_topAdditions)
+                    .Take(_opts.TopAdditions)
                     .ToList();
 
                 neighbors.AddRange(scoredAdditions);
@@ -503,11 +499,11 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             var fomsToSwapWith = availableFOMs
                 .Where(m => !existingFomIds.Contains(m.Id))
                 .OrderBy(x => _random.Next()) // Random sampling for diversity
-                .Take(_topSwaps)
+                .Take(_opts.TopSwaps)
                 .ToList();
 
             // For each position in the candidate (limited)
-            for (int i = 0; i < candidate.Candidate.Count && i < _swapPositionsToTry; i++)
+            for (int i = 0; i < candidate.Candidate.Count && i < _opts.SwapPositionsToTry; i++)
             {
                 var originalScore = candidate.Score;
 
@@ -520,7 +516,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                     var newScore = heuristicRegistry.ScoreCandidate(newCandidate);
 
                     // Only include swaps that improve or maintain the score (threshold)
-                    if (newScore >= originalScore * _swapMaintainThreshold)
+                    if (newScore >= originalScore * _opts.SwapMaintainThreshold)
                     {
                         neighbors.Add(new ScoredCandidate(newCandidate, newScore));
                     }
@@ -559,8 +555,8 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                 // Take the best removals
                 var bestRemovals = scoredRemovals
                     .OrderByDescending(x => x.Score)
-                    .Where(x => x.Score >= candidate.Score * _removalThresholdMultiplier)
-                    .Take(_topRemovals)
+                    .Where(x => x.Score >= candidate.Score * _opts.RemovalThresholdMultiplier)
+                    .Take(_opts.TopRemovals)
                     .ToList();
 
                 neighbors.AddRange(bestRemovals);
@@ -592,24 +588,6 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
 
             // Sort by score (descending)
             return [.. scoredCandidates.OrderByDescending(sc => sc.Score)];
-        }
-
-        /// <summary>
-        /// Determines if a candidate should be yielded based on adaptive criteria using generic scoring.
-        /// </summary>
-        private bool ShouldYieldCandidate(List<IMutant> candidate, int iteration, HeuristicRegistry heuristicRegistry)
-        {
-            // Use generic heuristic-based scoring for yielding decisions
-            var score = heuristicRegistry.ScoreCandidate(candidate);
-
-            // Early iterations: stricter filtering for quality
-            if (iteration < _maxIterations / 3)
-            {
-                return score > _qualityThresholdEarly;
-            }
-
-            // Later iterations: more lenient to ensure diversity
-            return score > _qualityThresholdLate;
         }
 
         /// <summary>
@@ -650,23 +628,8 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             string.Join(",", candidate.OrderBy(m => m.Id).Select(m => m.Id));
 
         /// <summary>
-        /// Class to represent a candidate with its score (same as original LocalSearchAlgorithm).
-        /// </summary>
-        private class ScoredCandidate
-        {
-            public List<IMutant> Candidate { get; }
-            public double Score { get; }
-
-            public ScoredCandidate(List<IMutant> candidate, double score)
-            {
-                Candidate = candidate;
-                Score = score;
-            }
-        }
-
-        /// <summary>
         /// Initialize starting points with diverse orders (2, 3, 4) targeting SSHOM potential.
-        /// Uses multi-order generation with balanced distribution and intelligent clustering.
+        /// Uses multi-order generation with balanced distribution and intelligent clustering based on available heuristics.
         /// </summary>
         private List<ScoredCandidate> InitializeMultiOrderSSHOMStartingPoints(
             IReadOnlyCollection<IMutant> availableFOMs,
@@ -675,19 +638,10 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             var initialCandidates = new List<ScoredCandidate>();
             var fomList = availableFOMs.ToList();
 
-            // Phase 1: Pre-filter and cluster FOMs for better compatibility
-            var clusteredFOMs = PrefilterAndClusterFOMs(fomList, heuristicRegistry);
-            
-            if (clusteredFOMs.Count < 2)
-            {
-                _logger.LogWarning("Insufficient FOMs with test coverage for multi-order SSHOM generation");
-                return initialCandidates;
-            }
-
-            // Phase 2: Generate candidates for each order with balanced distribution
-            var order2Candidates = GenerateOrder2Candidates(clusteredFOMs, heuristicRegistry);
-            var order3Candidates = GenerateOrder3Candidates(clusteredFOMs, heuristicRegistry);
-            var order4Candidates = GenerateOrder4Candidates(clusteredFOMs, heuristicRegistry);
+            // Phase 2: Generate candidates for each order with balanced distribution using heuristics
+            var order2Candidates = GenerateOrder2CandidatesUsingHeuristics([.. availableFOMs], heuristicRegistry);
+            var order3Candidates = GenerateOrder3CandidatesUsingHeuristics([.. availableFOMs], heuristicRegistry);
+            var order4Candidates = GenerateOrder4CandidatesUsingHeuristics([.. availableFOMs], heuristicRegistry);
 
             _logger.LogDebug("Generated candidates: Order2={Order2Count}, Order3={Order3Count}, Order4={Order4Count}",
                 order2Candidates.Count, order3Candidates.Count, order4Candidates.Count);
@@ -697,121 +651,125 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             initialCandidates.AddRange(order3Candidates);
             initialCandidates.AddRange(order4Candidates);
 
-            // Phase 4: Apply progressive filtering with multi-order awareness
-            return ApplyMultiOrderFiltering(initialCandidates, heuristicRegistry);
+            // Phase 4: Apply progressive filtering with heuristic awareness
+            return ApplyProgressiveFiltering(initialCandidates, heuristicRegistry);
         }
 
         /// <summary>
-        /// Pre-filters and clusters FOMs based on compatibility metrics for better HOM generation.
+        /// Pre-filters and clusters FOMs based on available heuristics rather than hard-coded logic.
         /// </summary>
-        private List<IMutant> PrefilterAndClusterFOMs(List<IMutant> fomList, HeuristicRegistry heuristicRegistry)
+        private List<IMutant> PrefilterAndClusterFOMsUsingHeuristics(List<IMutant> fomList, HeuristicRegistry heuristicRegistry)
         {
-            // Filter FOMs with potential to be killed
-            var killableFOMs = fomList.Where(fom =>
-                !fom.AssessingTests.IsEmpty &&
-                fom.ResultStatus != MutantStatus.NoCoverage).ToList();
+            // Start with all FOMs and let heuristics do the filtering
+            var candidateFOMs = fomList.ToList();
 
-            _logger.LogDebug("Filtered {KillableCount}/{TotalCount} FOMs as potentially killable",
-                killableFOMs.Count, fomList.Count);
-
-            if (killableFOMs.Count < 2)
+            // If we have filtering heuristics, use them to pre-filter individual FOMs
+            var filteringHeuristics = heuristicRegistry.GetFilteringHeuristics().ToList();
+            if (filteringHeuristics.Count > 0)
             {
-                killableFOMs = fomList.Where(f => !f.AssessingTests.IsEmpty).ToList();
-                _logger.LogDebug("Using fallback: {FallbackCount} FOMs with any coverage", killableFOMs.Count);
+                candidateFOMs = [.. candidateFOMs.Where(fom => !heuristicRegistry.ShouldFilterCandidate([fom]))];
+                
+                _logger.LogDebug("Pre-filtered {FilteredCount}/{TotalCount} FOMs using available heuristics",
+                    candidateFOMs.Count, fomList.Count);
             }
 
-            // Sort by heuristic compatibility for better clustering
-            return killableFOMs.OrderByDescending(fom => 
-                heuristicRegistry.ScoreCandidate([fom])).ToList();
+            // Sort by heuristic-based scoring for better clustering
+            var scoringHeuristics = heuristicRegistry.GetScoringHeuristics().ToList();
+            if (scoringHeuristics.Count > 0)
+            {
+                candidateFOMs = candidateFOMs.OrderByDescending(fom => 
+                    heuristicRegistry.ScoreCandidate([fom])).ToList();
+            }
+            else
+            {
+                // Fallback: simple random ordering for diversity
+                candidateFOMs = [.. candidateFOMs.OrderBy(x => _random.Next())];
+            }
+
+            return candidateFOMs;
         }
 
         /// <summary>
-        /// Generates high-quality order-2 candidates using enhanced pairing strategies.
+        /// Generates high-quality order-2 candidates using heuristic-based strategies.
         /// </summary>
-        private List<ScoredCandidate> GenerateOrder2Candidates(List<IMutant> killableFOMs, HeuristicRegistry heuristicRegistry)
+        private List<ScoredCandidate> GenerateOrder2CandidatesUsingHeuristics(List<IMutant> candidateFOMs, HeuristicRegistry heuristicRegistry)
         {
             var candidates = new List<ScoredCandidate>();
-            var targetCount = Math.Min(_candidatePoolSize / 3, _initialPairsPerSeed * killableFOMs.Count / 2);
+            var targetCount = Math.Min(_opts.TargetCandidateCount / 3, _opts.InitialPairsPerSeed * candidateFOMs.Count / 2);
 
-            for (var i = 0; i < killableFOMs.Count && candidates.Count < targetCount; i++)
+            // Generate pairs and score them using heuristics
+            for (var i = 0; i < candidateFOMs.Count && candidates.Count < targetCount; i++)
             {
-                var fom1 = killableFOMs[i];
+                var fom1 = candidateFOMs[i];
                 
-                // Find compatible FOMs with overlapping tests
-                var compatibleFOMs = killableFOMs.Skip(i + 1)
-                    .Where(fom2 => !fom1.AssessingTests.Intersect(fom2.AssessingTests).IsEmpty)
-                    .Take(Math.Min(10, killableFOMs.Count - i - 1)) // Limit to prevent combinatorial explosion
+                // Try pairing with subsequent FOMs
+                var pairingCandidates = candidateFOMs.Skip(i + 1)
+                    .Take(Math.Min(10, candidateFOMs.Count - i - 1)) // Limit to prevent combinatorial explosion
                     .ToList();
 
-                foreach (var fom2 in compatibleFOMs)
+                foreach (var fom2 in pairingCandidates)
                 {
                     var candidate = new List<IMutant> { fom1, fom2 };
-                    var score = heuristicRegistry.ScoreCandidate(candidate);
                     
+                    // Use heuristics to determine if this pair should be considered
                     if (!heuristicRegistry.ShouldFilterCandidate(candidate))
                     {
+                        var score = heuristicRegistry.ScoreCandidate(candidate);
                         candidates.Add(new ScoredCandidate(candidate, score));
                     }
                 }
             }
 
-            return candidates.OrderByDescending(c => c.Score).Take(targetCount).ToList();
+            return [.. candidates.OrderByDescending(c => c.Score).Take(targetCount)];
         }
 
         /// <summary>
-        /// Generates order-3 candidates by extending high-scoring pairs and using triplet heuristics.
+        /// Generates order-3 candidates using heuristic-based extension and direct generation strategies.
         /// </summary>
-        private List<ScoredCandidate> GenerateOrder3Candidates(List<IMutant> killableFOMs, HeuristicRegistry heuristicRegistry)
+        private List<ScoredCandidate> GenerateOrder3CandidatesUsingHeuristics(List<IMutant> candidateFOMs, HeuristicRegistry heuristicRegistry)
         {
             var candidates = new List<ScoredCandidate>();
-            var targetCount = Math.Min(_candidatePoolSize / 3, 50);
+            var targetCount = Math.Min(_opts.TargetCandidateCount / 3, 50);
 
-            // Strategy 1: Extend best order-2 pairs
-            var order2Base = GenerateOrder2Candidates(killableFOMs, heuristicRegistry).Take(20).ToList();
+            // Strategy 1: Extend best order-2 pairs using heuristics
+            var order2Base = GenerateOrder2CandidatesUsingHeuristics(candidateFOMs, heuristicRegistry).Take(20).ToList();
             
             foreach (var basePair in order2Base)
             {
                 var existingIds = new HashSet<int>(basePair.Candidate.Select(m => m.Id));
                 
                 // Find FOMs that could extend this pair
-                var extendingFOMs = killableFOMs
+                var extendingFOMs = candidateFOMs
                     .Where(fom => !existingIds.Contains(fom.Id))
-                    .Where(fom => basePair.Candidate.All(existing => 
-                        !fom.AssessingTests.Intersect(existing.AssessingTests).IsEmpty))
                     .Take(5)
                     .ToList();
 
                 foreach (var extendingFOM in extendingFOMs)
                 {
                     var candidate = new List<IMutant>(basePair.Candidate) { extendingFOM };
-                    var score = heuristicRegistry.ScoreCandidate(candidate);
                     
                     if (!heuristicRegistry.ShouldFilterCandidate(candidate))
                     {
+                        var score = heuristicRegistry.ScoreCandidate(candidate);
                         candidates.Add(new ScoredCandidate(candidate, score));
                     }
                 }
             }
 
-            // Strategy 2: Direct triplet generation using clustering
-            var clusterSize = Math.Min(killableFOMs.Count, 15);
+            // Strategy 2: Direct triplet generation using heuristic-based clustering
+            var clusterSize = Math.Min(candidateFOMs.Count, 15);
             for (var i = 0; i < clusterSize - 2 && candidates.Count < targetCount; i++)
             {
                 for (var j = i + 1; j < clusterSize - 1 && candidates.Count < targetCount; j++)
                 {
                     for (var k = j + 1; k < clusterSize && candidates.Count < targetCount; k++)
                     {
-                        var candidate = new List<IMutant> { killableFOMs[i], killableFOMs[j], killableFOMs[k] };
+                        var candidate = new List<IMutant> { candidateFOMs[i], candidateFOMs[j], candidateFOMs[k] };
                         
-                        // Check if all three have overlapping tests
-                        if (HasMutualTestOverlap(candidate))
+                        if (!heuristicRegistry.ShouldFilterCandidate(candidate))
                         {
                             var score = heuristicRegistry.ScoreCandidate(candidate);
-                            
-                            if (!heuristicRegistry.ShouldFilterCandidate(candidate))
-                            {
-                                candidates.Add(new ScoredCandidate(candidate, score));
-                            }
+                            candidates.Add(new ScoredCandidate(candidate, score));
                         }
                     }
                 }
@@ -821,41 +779,39 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         }
 
         /// <summary>
-        /// Generates order-4 candidates using advanced composition strategies.
+        /// Generates order-4 candidates using heuristic-based advanced composition strategies.
         /// </summary>
-        private List<ScoredCandidate> GenerateOrder4Candidates(List<IMutant> killableFOMs, HeuristicRegistry heuristicRegistry)
+        private List<ScoredCandidate> GenerateOrder4CandidatesUsingHeuristics(List<IMutant> candidateFOMs, HeuristicRegistry heuristicRegistry)
         {
             var candidates = new List<ScoredCandidate>();
-            var targetCount = Math.Min(_candidatePoolSize / 3, 30);
+            var targetCount = Math.Min(_opts.TargetCandidateCount / 3, 30);
 
-            // Strategy 1: Extend best order-3 candidates
-            var order3Base = GenerateOrder3Candidates(killableFOMs, heuristicRegistry).Take(15).ToList();
+            // Strategy 1: Extend best order-3 candidates using heuristics
+            var order3Base = GenerateOrder3CandidatesUsingHeuristics(candidateFOMs, heuristicRegistry).Take(15).ToList();
             
             foreach (var baseTriple in order3Base)
             {
                 var existingIds = new HashSet<int>(baseTriple.Candidate.Select(m => m.Id));
                 
-                var extendingFOMs = killableFOMs
+                var extendingFOMs = candidateFOMs
                     .Where(fom => !existingIds.Contains(fom.Id))
-                    .Where(fom => baseTriple.Candidate.All(existing => 
-                        !fom.AssessingTests.Intersect(existing.AssessingTests).IsEmpty))
                     .Take(3)
                     .ToList();
 
                 foreach (var extendingFOM in extendingFOMs)
                 {
                     var candidate = new List<IMutant>(baseTriple.Candidate) { extendingFOM };
-                    var score = heuristicRegistry.ScoreCandidate(candidate);
                     
                     if (!heuristicRegistry.ShouldFilterCandidate(candidate))
                     {
+                        var score = heuristicRegistry.ScoreCandidate(candidate);
                         candidates.Add(new ScoredCandidate(candidate, score));
                     }
                 }
             }
 
-            // Strategy 2: Merge compatible pairs
-            var order2Candidates = GenerateOrder2Candidates(killableFOMs, heuristicRegistry).Take(10).ToList();
+            // Strategy 2: Merge compatible pairs using heuristics
+            var order2Candidates = GenerateOrder2CandidatesUsingHeuristics(candidateFOMs, heuristicRegistry).Take(10).ToList();
             
             for (var i = 0; i < order2Candidates.Count - 1 && candidates.Count < targetCount; i++)
             {
@@ -870,79 +826,16 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
                         var candidate = new List<IMutant>(pair1);
                         candidate.AddRange(pair2);
                         
-                        if (HasMutualTestOverlap(candidate))
+                        if (!heuristicRegistry.ShouldFilterCandidate(candidate))
                         {
                             var score = heuristicRegistry.ScoreCandidate(candidate);
-                            
-                            if (!heuristicRegistry.ShouldFilterCandidate(candidate))
-                            {
-                                candidates.Add(new ScoredCandidate(candidate, score));
-                            }
+                            candidates.Add(new ScoredCandidate(candidate, score));
                         }
                     }
                 }
             }
 
             return candidates.OrderByDescending(c => c.Score).Take(targetCount).ToList();
-        }
-
-        /// <summary>
-        /// Checks if all mutants in a candidate have mutual test overlap.
-        /// </summary>
-        private static bool HasMutualTestOverlap(List<IMutant> candidate)
-        {
-            if (candidate.Count < 2) return true;
-            
-            var commonTests = candidate[0].AssessingTests;
-            for (var i = 1; i < candidate.Count; i++)
-            {
-                commonTests = commonTests.Intersect(candidate[i].AssessingTests);
-                if (commonTests.IsEmpty) return false;
-            }
-            
-            return !commonTests.IsEmpty;
-        }
-
-        /// <summary>
-        /// Applies multi-order aware filtering with balanced representation.
-        /// </summary>
-        private List<ScoredCandidate> ApplyMultiOrderFiltering(
-            List<ScoredCandidate> candidates,
-            HeuristicRegistry heuristicRegistry)
-        {
-            if (candidates.Count == 0) return candidates;
-
-            // Group by order for balanced selection
-            var candidatesByOrder = candidates.GroupBy(c => c.Candidate.Count).ToDictionary(g => g.Key, g => g.ToList());
-            
-            var filteredCandidates = new List<ScoredCandidate>();
-            var targetPerOrder = _candidatePoolSize / Math.Max(candidatesByOrder.Count, 1);
-
-            foreach (var (order, orderCandidates) in candidatesByOrder)
-            {
-                // Apply heuristic filtering
-                var filtered = orderCandidates.Where(c => !heuristicRegistry.ShouldFilterCandidate(c.Candidate)).ToList();
-                
-                // If filtering is too aggressive, fall back to score-based selection
-                if (filtered.Count < Math.Max(2, orderCandidates.Count / _criticalFilterDivisor))
-                {
-                    _logger.LogDebug("Critical filtering too aggressive for order {Order}, using score-based selection", order);
-                    filtered = orderCandidates.OrderByDescending(c => c.Score)
-                        .Take(Math.Max(_fallbackTakeMin, targetPerOrder))
-                        .ToList();
-                }
-                else
-                {
-                    filtered = filtered.OrderByDescending(c => c.Score).Take(targetPerOrder).ToList();
-                }
-                
-                filteredCandidates.AddRange(filtered);
-                
-                _logger.LogDebug("Order {Order}: Selected {Selected}/{Total} candidates", 
-                    order, filtered.Count, orderCandidates.Count);
-            }
-
-            return filteredCandidates.OrderByDescending(c => c.Score).ToList();
         }
     }
 }

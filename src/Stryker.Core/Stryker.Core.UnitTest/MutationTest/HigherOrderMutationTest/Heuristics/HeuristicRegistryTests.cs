@@ -139,62 +139,6 @@ namespace Stryker.Core.UnitTest.MutationTest.HigherOrderMutationTest.Heuristics
         }
 
         [TestMethod]
-        public void SuggestNextCandidates_ShouldAggregateAllHeuristicSuggestions()
-        {
-            // Arrange
-            var currentCandidate = new List<IMutant> { _mockFOMs[0], _mockFOMs[1] };
-            var availableFOMs = _mockFOMs;
-            
-            var suggestion1 = new List<IMutant> { _mockFOMs[0], _mockFOMs[2] };
-            var suggestion2 = new List<IMutant> { _mockFOMs[1], _mockFOMs[3] };
-            var suggestion3 = new List<IMutant> { _mockFOMs[2], _mockFOMs[4] };
-            
-            var heuristic1 = HeuristicTestHelpers.CreateSearchHeuristicMock("SearchHeuristic1", new List<List<IMutant>> { suggestion1 });
-            var heuristic2 = HeuristicTestHelpers.CreateSearchHeuristicMock("SearchHeuristic2", new List<List<IMutant>> { suggestion2, suggestion3 });
-            var heuristic3 = HeuristicTestHelpers.CreateNonCapabilityHeuristicMock("NonSearchHeuristic");
-            
-            _sut.RegisterHeuristic(heuristic1.Object);
-            _sut.RegisterHeuristic(heuristic2.Object);
-            _sut.RegisterHeuristic(heuristic3.Object);
-
-            // Act
-            var result = _sut.SuggestNextCandidates(currentCandidate, availableFOMs);
-
-            // Assert
-            result.Count.ShouldBe(3); // All 3 suggestions combined
-            result.ShouldContain(suggestion1);
-            result.ShouldContain(suggestion2);
-            result.ShouldContain(suggestion3);
-            
-            heuristic1.Verify(h => h.SuggestNextCandidates(currentCandidate, availableFOMs), Times.Once);
-            heuristic2.Verify(h => h.SuggestNextCandidates(currentCandidate, availableFOMs), Times.Once);
-            heuristic3.Verify(h => h.SuggestNextCandidates(It.IsAny<List<IMutant>>(), It.IsAny<IReadOnlyCollection<IMutant>>()), Times.Never);
-        }
-
-        [TestMethod]
-        public void RegisterDefaultHeuristics_ShouldRegisterExpectedNumberOfHeuristics()
-        {
-            // Arrange - create a fresh registry that will register default heuristics
-            var registry = new HeuristicRegistry(_mockFOMs, _optionsMock.Object, _inputMock.Object);
-            
-            // Act - DefaultHeuristics are registered in the constructor
-            var registeredHeuristics = registry.RegisteredHeuristics;
-            
-            // Assert - We expect a reasonable number of default heuristics
-            registeredHeuristics.Count.ShouldBeGreaterThanOrEqualTo(5); // At least some heuristics
-            registeredHeuristics.Count.ShouldBeLessThanOrEqualTo(15); // But not too many
-            
-            // Verify that we have at least one of each type of heuristic
-            var scoringHeuristics = registry.GetScoringHeuristics().ToList();
-            var filteringHeuristics = registry.GetFilteringHeuristics().ToList();
-            var searchHeuristics = registry.GetSearchGuidanceHeuristics().ToList();
-            
-            scoringHeuristics.Count.ShouldBeGreaterThan(0);
-            filteringHeuristics.Count.ShouldBeGreaterThan(0);
-            searchHeuristics.Count.ShouldBeGreaterThan(0);
-        }
-
-        [TestMethod]
         public void GetScoringHeuristics_ShouldReturnOnlyHeuristicsWithFitnessScoringAndPositiveWeight()
         {
             // Arrange

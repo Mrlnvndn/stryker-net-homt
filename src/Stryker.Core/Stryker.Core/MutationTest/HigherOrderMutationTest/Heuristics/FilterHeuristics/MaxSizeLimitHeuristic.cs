@@ -25,6 +25,6 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Heuristics
         
         public override double ScoreCandidate(List<IMutant> candidate) => ShouldFilterCandidate(candidate) ? 0.0 : 1.0;
 
-        public override bool ShouldFilterCandidate(List<IMutant> candidate) => candidate == null || candidate.Count < 2 || candidate.Count > _maxSize;
+        public override bool ShouldFilterCandidate(List<IMutant> candidate) => candidate == null || candidate.Count > _maxSize;
     }
 }

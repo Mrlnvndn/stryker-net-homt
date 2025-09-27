@@ -48,7 +48,7 @@ public class OverlappingTestsHeuristic : BaseHOMHeuristic
 
         // Get assessing tests for each constituent mutant
         var assessingTestSets = candidate.Select(m => m.AssessingTests).ToList();
-        
+
         // Handle edge cases
         if (assessingTestSets.Any(tests => tests == null || tests.IsEmpty))
         {
@@ -88,7 +88,7 @@ public class OverlappingTestsHeuristic : BaseHOMHeuristic
         // Calculate Jaccard similarity coefficient with null safety
         var intersectionSize = intersection?.GetIdentifiers()?.Count() ?? 0;
         var unionSize = union?.GetIdentifiers()?.Count() ?? 0;
-        
+
         if (unionSize == 0)
         {
             return 0.0;
@@ -106,12 +106,12 @@ public class OverlappingTestsHeuristic : BaseHOMHeuristic
         // This helps prioritize candidates that not only have good relative overlap
         // but also sufficient absolute coverage for meaningful SSHOM validation
         var sizeWeight = CalculateSizeWeight(intersectionSize);
-        
+
         // Combine Jaccard similarity with size weighting
         var finalScore = jaccardSimilarity * sizeWeight;
 
         var normalizedScore = NormalizeScore(finalScore);
-        
+
         // Final NaN protection
         return double.IsNaN(normalizedScore) || double.IsInfinity(normalizedScore) ? 0.0 : normalizedScore;
     }
@@ -142,7 +142,7 @@ public class OverlappingTestsHeuristic : BaseHOMHeuristic
     {
         // Optional: Enable filtering for candidates with no assessing test overlap
         // This can be useful to avoid creating HOMs that have no potential for SSHOM validation
-        
+
         if (candidate == null || candidate.Count < 2)
         {
             return true; // Filter out invalid candidates
@@ -150,7 +150,7 @@ public class OverlappingTestsHeuristic : BaseHOMHeuristic
 
         // Check if there's any assessing test overlap at all
         var assessingTestSets = candidate.Select(m => m.AssessingTests).ToList();
-        
+
         if (assessingTestSets.Any(tests => tests == null || tests.IsEmpty))
         {
             return true; // Filter out if any mutant has no assessing tests
@@ -179,7 +179,7 @@ public class OverlappingTestsHeuristic : BaseHOMHeuristic
         }
 
         var assessingTestSets = candidate.Select(m => m.AssessingTests).ToList();
-        
+
         var intersection = assessingTestSets[0];
         for (var i = 1; i < assessingTestSets.Count; i++)
         {

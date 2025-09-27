@@ -12,11 +12,12 @@ namespace Stryker.Core.Mutants;
 /// </summary>
 public class HigherOrderMutant : IMutant
 {
-    public HigherOrderMutant(List<IMutant> constituentMutants, string algorithmUsed = null)
+    public HigherOrderMutant(List<IMutant> constituentMutants, string algorithmUsed = null, double? predictedScore = null)
     {
         ConstituentMutants = constituentMutants ?? throw new ArgumentNullException(nameof(constituentMutants));
         AlgorithmUsed = algorithmUsed ?? "Unknown";
         CreatedAt = DateTime.Now;
+        PredictedScore = predictedScore;
 
         // Initialize IMutant properties with sensible defaults
         ResultStatus = MutantStatus.Pending;
@@ -36,6 +37,11 @@ public class HigherOrderMutant : IMutant
     /// The algorithm that generated this candidate.
     /// </summary>
     public string AlgorithmUsed { get; }
+
+    /// <summary>
+    /// Optional predicted/heuristic score assigned by the generating algorithm.
+    /// </summary>
+    public double? PredictedScore { get; set; }
 
     /// <summary>
     /// When this candidate was created.

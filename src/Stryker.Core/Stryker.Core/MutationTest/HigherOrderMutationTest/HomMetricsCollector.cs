@@ -13,6 +13,7 @@ public static class HomMetricsCollector
     public static HOMGenerationResult GenerationResult { get; set; }
     public static SSHOMAnalysisResult SshomAnalysis { get; set; }
     public static TimeSpan TotalRunDuration { get; set; }
+    public static int? RandomSeed { get; set; }
 
     public static void Reset()
     {
@@ -20,5 +21,6 @@ public static class HomMetricsCollector
         GenerationResult = null;
         SshomAnalysis = null;
         TotalRunDuration = TimeSpan.Zero;
+        RandomSeed = null;
     }
 }

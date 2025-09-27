@@ -16,7 +16,8 @@ public class HOMGenerationResult(
     bool isPreTestRun,
     string algorithmUsed,
     int heuristicsUsed,
-    TimeSpan generationTime)
+    TimeSpan generationTime,
+    IReadOnlyList<HOMGenerationAlgorithmStats> algorithmStats = null)
 {
     /// <summary>
     /// Generated higher-order mutant candidates (HOMs).
@@ -35,7 +36,7 @@ public class HOMGenerationResult(
     public bool IsPreTestRun { get; } = isPreTestRun;
 
     /// <summary>
-    /// Name of the algorithm used to produce the candidates.
+    /// Name of the algorithm(s) used to produce the candidates.
     /// </summary>
     public string AlgorithmUsed { get; } = algorithmUsed ?? "Unknown";
 
@@ -53,6 +54,11 @@ public class HOMGenerationResult(
     /// Time spent generating HOM candidates.
     /// </summary>
     public TimeSpan GenerationTime { get; } = generationTime;
+
+    /// <summary>
+    /// Per-algorithm generation stats (kept, duplicates, filtered, etc.).
+    /// </summary>
+    public IReadOnlyList<HOMGenerationAlgorithmStats> AlgorithmStats { get; } = algorithmStats ?? Array.Empty<HOMGenerationAlgorithmStats>();
 
     /// <summary>
     /// Number of unique FOMs that appear in at least one HOM.

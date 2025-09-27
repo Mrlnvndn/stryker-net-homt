@@ -105,13 +105,14 @@ public class StrykerRunner : IStrykerRunner
                     _logger.LogWarning("It\'s a mutant-free world, nothing to test.");
                 }
 
+                // No tests => still finalize metrics timing
+                stopwatch.Stop();
+                HomMetricsCollector.TotalRunDuration = stopwatch.Elapsed;
                 reporters.OnAllMutantsTested(rootComponent, combinedTestProjectsInfo);
                 if (disposeOrchestrator)
                 {
                     projectOrchestrator.Dispose();
                 }
-                stopwatch.Stop();
-                HomMetricsCollector.TotalRunDuration = stopwatch.Elapsed;
                 return new StrykerRunResult(options, rootComponent.GetMutationScore());
             }
 
@@ -123,20 +124,9 @@ public class StrykerRunner : IStrykerRunner
             {
                 project.Test(project.Input.SourceProjectInfo.ProjectContents.Mutants.Where(x => x.ResultStatus == MutantStatus.Pending).ToList());
             }
-            // dispose and stop runners
-            if (disposeOrchestrator)
-            {
-                projectOrchestrator.Dispose();
-            }
-            // Restore assemblies
-            foreach (var project in _mutationTestProcesses)
-            {
-                project.Restore();
-            }
+           
 
-            reporters.OnAllMutantsTested(rootComponent, combinedTestProjectsInfo);
-
-            // Run SSHOM analysis if Higher-Order Mutations are enabled here temprarily, integrate with ONAllMutantsTested in the future
+            // Perform SSHOM analysis BEFORE notifying reporters so CSV reporter gets populated data
             if (options.OptimizationMode.HasFlag(OptimizationModes.HOMTValidate))
             {
                 foreach (var project in _mutationTestProcesses)
@@ -155,8 +145,20 @@ public class StrykerRunner : IStrykerRunner
                 }
             }
 
+             // dispose and stop runners
+            if (disposeOrchestrator)
+            {
+                projectOrchestrator.Dispose();
+            }
+            // Restore assemblies
+            foreach (var project in _mutationTestProcesses)
+            {
+                project.Restore();
+            }
+
             stopwatch.Stop();
             HomMetricsCollector.TotalRunDuration = stopwatch.Elapsed;
+            reporters.OnAllMutantsTested(rootComponent, combinedTestProjectsInfo);
             return new StrykerRunResult(options, rootComponent.GetMutationScore());
         }
 #if !DEBUG
