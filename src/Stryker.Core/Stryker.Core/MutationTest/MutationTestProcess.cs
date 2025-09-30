@@ -257,6 +257,17 @@ public class MutationTestProcess : IMutationTestProcess
         Logger.LogInformation("HOMT: Starting Higher-Order Mutant generation in {Mode} mode for {FOMCount} First-Order Mutants", 
             modeDescription, mutantsToTest.Count);
         
+        // Collect run-level metrics for reporting
+        HomMetricsCollector.TotalFomsInPool = mutantsToTest.Count;
+        try
+        {
+            HomMetricsCollector.InitialTestsCount = Input.InitialTestRun?.Result?.ExecutedTests?.Count;
+        }
+        catch
+        {
+            // ignore if initial test run context is not available
+        }
+        
         // Create the HigherOrderMutation instance and delegate all logic to it
         var higherOrderMutation = new HigherOrderMutation(_options, Input, mutantsToTest);
 
@@ -342,7 +353,7 @@ public class MutationTestProcess : IMutationTestProcess
     private static List<IHOMHeuristic> CreateHeuristicsFromOptions(IEnumerable<HOMTHeuristicKind> heuristicKinds)
     {
         var heuristics = new List<IHOMHeuristic>();
-        
+
         foreach (var heuristicKind in heuristicKinds)
         {
             IHOMHeuristic heuristic = heuristicKind switch
@@ -365,7 +376,7 @@ public class MutationTestProcess : IMutationTestProcess
         return heuristics;
     }
 
-    private IEnumerable<List<IMutant>> BuildMutantGroupsForTest(IReadOnlyCollection<IMutant> mutantsNotRun)
+    private List<List<IMutant>> BuildMutantGroupsForTest(IReadOnlyCollection<IMutant> mutantsNotRun)
     {
         Logger.LogDebug("HOMT: Building mutant groups for testing from {MutantCount} mutants", mutantsNotRun.Count);
         
@@ -374,7 +385,9 @@ public class MutationTestProcess : IMutationTestProcess
         {
             Logger.LogDebug("HOMT: Using individual mutant groups (DisableMixMutants or no coverage-based testing)");
             // For HOMs, ensure each group contains only the HOM itself, not its constituents
-            return mutantsNotRun.Select(x => new List<IMutant> { x });
+            var singletons = mutantsNotRun.Select(x => new List<IMutant> { x }).ToList();
+            HomMetricsCollector.TestRunsCount = singletons.Count;
+            return singletons;
         }
 
         Logger.LogDebug("HOMT: Using coverage-based mutant grouping");
@@ -451,6 +464,7 @@ public class MutationTestProcess : IMutationTestProcess
             Logger.LogInformation("HOMT: Created {BlocksCount} test runs for mutation testing", blocks.Count);
         }
 
+        HomMetricsCollector.TestRunsCount = blocks.Count;
         return blocks;
     }
 

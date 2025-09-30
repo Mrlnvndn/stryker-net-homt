@@ -20,7 +20,6 @@ public class SSHOMAnalysisResult
     }
 
     public int SSHOMCount { get; }
-    public int AnalyzedCount { get; }
     public int TotalCandidates { get; }
     public TimeSpan AnalysisTime { get; }
     
@@ -29,7 +28,7 @@ public class SSHOMAnalysisResult
     /// </summary>
     public Dictionary<int, int> SSHOMsByOrder { get; }
     
-    public double SSHOMRate => AnalyzedCount > 0 ? (double)SSHOMCount / AnalyzedCount : 0.0;
+    public double SSHOMRate => TotalCandidates > 0 ? (double)SSHOMCount / TotalCandidates : 0.0;
     
     /// <summary>
     /// Gets the number of SSHOMs found for a specific order

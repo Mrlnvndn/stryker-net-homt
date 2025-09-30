@@ -16,6 +16,7 @@ public class HOMTHeuristicsInputTests : TestBase
         var target = new HOMTHeuristicsInput();
         target.HelpText.ShouldContain("Select HOMT heuristics to use");
         target.HelpText.ShouldContain("all");
+        target.HelpText.ShouldContain("none");
         target.HelpText.ShouldContain("CodeLocation");
         target.HelpText.ShouldContain("EmptyAssessingTests");
         target.HelpText.ShouldContain("MutatorType");
@@ -112,5 +113,25 @@ public class HOMTHeuristicsInputTests : TestBase
 
         // When "all" is specified, it should return all heuristics regardless of other specific ones
         result.Count().ShouldBe(6);
+    }
+
+    [TestMethod]
+    public void ShouldReturnEmptyWhenNoneIsSpecified()
+    {
+        var target = new HOMTHeuristicsInput { SuppliedInput = new[] { "none" } };
+
+        var result = target.Validate();
+
+        result.Count().ShouldBe(0);
+    }
+
+    [TestMethod]
+    public void ShouldReturnEmptyWhenNoneIsMixedWithOthers()
+    {
+        var target = new HOMTHeuristicsInput { SuppliedInput = new[] { "none", "CodeLocation" } };
+
+        var result = target.Validate();
+
+        result.Count().ShouldBe(0);
     }
 }

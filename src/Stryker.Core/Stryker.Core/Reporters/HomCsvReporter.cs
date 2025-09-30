@@ -65,6 +65,18 @@ public class HomCsvReporter : IReporter
         var usedHeuristics = string.Join("|", (_options.HOMTHeuristics ?? Array.Empty<HOMTHeuristicKind>()).Select(h => h.ToString()));
         var totalTestMs = totalRunDuration.TotalMilliseconds;
 
+        // Additional requested metrics
+        var mode = (_options.OptimizationMode.HasFlag(OptimizationModes.HOMTValidate) ? "validate" : (_options.OptimizationMode.HasFlag(OptimizationModes.HOMTAccelerate) ? "accelerate" : string.Empty));
+        var totalFomsInPool = HomMetricsCollector.TotalFomsInPool ?? 0;
+        var uniqueConstituentFomsInHoms = 0;
+        var missingFomsCount = 0;
+        var initialTestsCount = HomMetricsCollector.InitialTestsCount ?? 0;
+        var analysisTimeMs = analysis?.AnalysisTime.TotalMilliseconds ?? 0.0;
+        var testRunsCount = HomMetricsCollector.TestRunsCount ?? 0;
+
+        double? avgPredAll = null, medianPredAll = null;
+        double? avgPredSshom = null, medianPredSshom = null;
+
         // Aggregated per-algorithm stats from CreateCandidateHOMs
         var rawCandidatesTotal = 0;
         var dupWithinTotal = 0;
@@ -82,6 +94,27 @@ public class HomCsvReporter : IReporter
                 hom2 = created.Count(h => h.Order == 2);
                 hom3 = created.Count(h => h.Order == 3);
                 hom4 = created.Count(h => h.Order == 4);
+
+                // Predicted score stats for all kept
+                var predAll = created.Select(h => h.PredictedScore).Where(v => v.HasValue).Select(v => v!.Value).OrderBy(v => v).ToList();
+                if (predAll.Count > 0)
+                {
+                    avgPredAll = predAll.Average();
+                    medianPredAll = (predAll.Count % 2 == 1)
+                        ? predAll[predAll.Count / 2]
+                        : (predAll[predAll.Count / 2 - 1] + predAll[predAll.Count / 2]) / 2.0;
+                }
+
+                // Fallback for unique and missing if generation is not available
+                if (generation is null)
+                {
+                    uniqueConstituentFomsInHoms = created.SelectMany(h => h.ConstituentMutants).Select(m => m.Id).Distinct().Count();
+                    if (totalFomsInPool > 0)
+                    {
+                        var diff = totalFomsInPool - uniqueConstituentFomsInHoms;
+                        missingFomsCount = diff > 0 ? diff : 0;
+                    }
+                }
             }
 
             if (analysis is not null)
@@ -92,10 +125,27 @@ public class HomCsvReporter : IReporter
                 sshom4 = analysis.GetSSHOMCountForOrder(4);
             }
 
+            // Predicted score stats for validated SSHOMs
+            var sshoms = homContext.ValidatedSSHOMs?.ToList();
+            if (sshoms is not null && sshoms.Count > 0)
+            {
+                var predS = sshoms.Select(h => h.PredictedScore).Where(v => v.HasValue).Select(v => v!.Value).OrderBy(v => v).ToList();
+                if (predS.Count > 0)
+                {
+                    avgPredSshom = predS.Average();
+                    medianPredSshom = (predS.Count % 2 == 1)
+                        ? predS[predS.Count / 2]
+                        : (predS[predS.Count / 2 - 1] + predS[predS.Count / 2]) / 2.0;
+                }
+            }
+
             if (generation is not null)
             {
                 homGenerationMs = generation.GenerationTime.TotalMilliseconds;
                 usedAlgorithms = generation.AlgorithmUsed;
+
+                uniqueConstituentFomsInHoms = generation.UniqueFomsInHoms;
+                missingFomsCount = generation.MissingFirstOrderMutants?.Count ?? 0;
 
                 if (generation.AlgorithmStats is not null && generation.AlgorithmStats.Count > 0)
                 {
@@ -127,7 +177,7 @@ public class HomCsvReporter : IReporter
 
         if (writeHeader)
         {
-            writer.WriteLine("total_homs,hom_2,hom_3,hom_4,sshom_rate_percent,sshom_2,sshom_3,sshom_4,hom_generation_ms,used_algorithms,used_heuristics,total_test_duration_ms,mutation_score_percent,raw_candidates_total,dup_within_total,dup_across_total,filtered_empty_total,filtered_invalid_total,per_algorithm_stats,random_seed");
+            writer.WriteLine("total_homs,hom_2,hom_3,hom_4,sshom_rate_percent,sshom_2,sshom_3,sshom_4,hom_generation_ms,used_algorithms,used_heuristics,total_test_duration_ms,mutation_score_percent,raw_candidates_total,dup_within_total,dup_across_total,filtered_empty_total,filtered_invalid_total,per_algorithm_stats,random_seed,mode,total_foms_in_pool,unique_constituent_foms_in_homs_count,missing_foms_count,initial_tests_count,analysis_time_ms,test_runs_count,avg_perdicted_score_all_kept,median_predicted_score_all_kept,avg_predicted_score_sshoms,median_predicted_score_sshoms");
         }
 
         var fields = new[]
@@ -151,7 +201,18 @@ public class HomCsvReporter : IReporter
             filteredEmptyTotal.ToString(CultureInfo.InvariantCulture),
             filteredInvalidTotal.ToString(CultureInfo.InvariantCulture),
             Escape(perAlgorithmStats),
-            (randomSeed.HasValue ? randomSeed.Value.ToString(CultureInfo.InvariantCulture) : string.Empty)
+            (randomSeed.HasValue ? randomSeed.Value.ToString(CultureInfo.InvariantCulture) : string.Empty),
+            mode,
+            totalFomsInPool.ToString(CultureInfo.InvariantCulture),
+            uniqueConstituentFomsInHoms.ToString(CultureInfo.InvariantCulture),
+            missingFomsCount.ToString(CultureInfo.InvariantCulture),
+            initialTestsCount.ToString(CultureInfo.InvariantCulture),
+            analysisTimeMs.ToString("F2", CultureInfo.InvariantCulture),
+            testRunsCount.ToString(CultureInfo.InvariantCulture),
+            avgPredAll.HasValue ? avgPredAll.Value.ToString("F4", CultureInfo.InvariantCulture) : string.Empty,
+            medianPredAll.HasValue ? medianPredAll.Value.ToString("F4", CultureInfo.InvariantCulture) : string.Empty,
+            avgPredSshom.HasValue ? avgPredSshom.Value.ToString("F4", CultureInfo.InvariantCulture) : string.Empty,
+            medianPredSshom.HasValue ? medianPredSshom.Value.ToString("F4", CultureInfo.InvariantCulture) : string.Empty
         };
         writer.WriteLine(string.Join(",", fields));
 

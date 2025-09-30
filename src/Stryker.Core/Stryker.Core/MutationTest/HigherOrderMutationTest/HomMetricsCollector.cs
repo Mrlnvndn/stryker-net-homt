@@ -15,6 +15,11 @@ public static class HomMetricsCollector
     public static TimeSpan TotalRunDuration { get; set; }
     public static int? RandomSeed { get; set; }
 
+    // Added aggregated metrics for reporting
+    public static int? TotalFomsInPool { get; set; }
+    public static int? InitialTestsCount { get; set; }
+    public static int? TestRunsCount { get; set; }
+
     public static void Reset()
     {
         HomContext = null;
@@ -22,5 +27,8 @@ public static class HomMetricsCollector
         SshomAnalysis = null;
         TotalRunDuration = TimeSpan.Zero;
         RandomSeed = null;
+        TotalFomsInPool = null;
+        InitialTestsCount = null;
+        TestRunsCount = null;
     }
 }
