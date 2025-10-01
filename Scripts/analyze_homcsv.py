@@ -210,6 +210,9 @@ def build_runs_table(root: Path) -> pd.DataFrame:
             for k,v in stats.items():
                 flat[prefix+k]=v
 
+        # OA01 is never random - it's always the "all heuristics OFF" baseline condition
+        is_random = False
+
         out = dict(
             solution = meta["solution"],
             algorithm = meta["algorithm"] or used_algorithms,
@@ -220,7 +223,7 @@ def build_runs_table(root: Path) -> pd.DataFrame:
             used_heuristics = used_heuristics or "",
             mode = get("mode", None),
             random_seed = get("random_seed", None),
-            is_random_row = bool((meta["oa_row"]==1) and (len(heur_on)==0)),
+            is_random_row = is_random,
             csv_path = str(p),
         )
         for h in HEURISTICS: out[f"heur_{h}_on"] = (h in heur_on)
