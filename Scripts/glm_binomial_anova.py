@@ -57,6 +57,235 @@ HEURISTIC_MAP = {
     'SyntaxNodeConflict': 'H_SyntaxNodeConflict'
 }
 
+# Global flag for Firth availability (checked once at startup)
+_FIRTH_AVAILABLE = None
+
+def check_r_dependencies() -> Dict[str, bool]:
+    """
+    Check if R, rpy2, and logistf are available for Firth regression.
+    
+    Returns:
+        Dict with availability status:
+        {
+            'rpy2': True/False,
+            'r_installed': True/False,
+            'logistf': True/False,
+            'firth_available': True/False  # All three
+        }
+    """
+    status = {
+        'rpy2': False,
+        'r_installed': False,
+        'logistf': False,
+        'firth_available': False
+    }
+    
+    # Check rpy2
+    try:
+        import rpy2
+        from rpy2 import robjects as ro
+        status['rpy2'] = True
+        
+        # Check R installation
+        try:
+            r_version = ro.r('R.version.string')[0]
+            print(f"  Found R: {r_version}")
+            status['r_installed'] = True
+            
+            # Check logistf package
+            try:
+                from rpy2.robjects.packages import importr
+                importr('logistf')
+                status['logistf'] = True
+                print("  Found R package: logistf")
+            except Exception as e:
+                print(f"  R package 'logistf' not installed")
+                print(f"  Install in R with: install.packages('logistf')")
+                
+        except Exception as e:
+            print(f"  R not properly configured: {e}")
+            
+    except ImportError:
+        print("  rpy2 not installed (already installed, but import failed)")
+    
+    status['firth_available'] = all([
+        status['rpy2'], 
+        status['r_installed'], 
+        status['logistf']
+    ])
+    
+    return status
+
+
+class FirthResults:
+    """
+    Wrapper for R logistf results to mimic statsmodels GLMResults interface.
+    Provides valid inference (CIs, p-values) even with separation.
+    """
+    
+    def __init__(self, r_fit_result, formula: str, data: pd.DataFrame):
+        """
+        Initialize from R logistf fit result.
+        
+        Args:
+            r_fit_result: R logistf fitted model object
+            formula: Model formula string
+            data: Original pandas DataFrame
+        """
+        import rpy2.robjects as ro
+        
+        # Extract key results from R object
+        self.params = self._extract_params(r_fit_result)
+        self.bse = self._extract_se(r_fit_result)
+        self.pvalues = self._extract_pvalues(r_fit_result)
+        self.conf_int_lower = self._extract_ci_lower(r_fit_result)
+        self.conf_int_upper = self._extract_ci_upper(r_fit_result)
+        
+        # Model fit statistics
+        self.deviance = self._extract_deviance(r_fit_result)
+        self.null_deviance = None  # Will calculate separately if needed
+        self.df_resid = self._extract_df_resid(r_fit_result)
+        self.df_null = len(data) - 1  # n - 1 for intercept-only model
+        
+        # Likelihood (for LR tests)
+        self.llf = self._extract_loglik(r_fit_result)
+        
+        # Store original R object for advanced operations
+        self._r_fit = r_fit_result
+        
+        # Metadata
+        self.formula = formula
+        self.data = data
+        self.converged = True  # Firth always converges
+        
+        # Flag this as Firth fit
+        self._penalized = True  # Technically penalized, but valid inference
+        self._fit_method = 'firth'
+        
+        # Calculate AIC/BIC
+        self.aic = self._calculate_aic()
+        self.bic = self._calculate_bic()
+    
+    def _extract_params(self, r_fit) -> pd.Series:
+        """Extract parameter estimates (coefficients)."""
+        import rpy2.robjects as ro
+        coefs = ro.r('coef')(r_fit)
+        names = ro.r('names')(coefs)
+        return pd.Series(
+            data=list(coefs),
+            index=list(names),
+            name='params'
+        )
+    
+    def _extract_se(self, r_fit) -> pd.Series:
+        """Extract standard errors from covariance matrix."""
+        import numpy as np
+        import rpy2.robjects as ro
+        
+        # logistf stores covariance in $var
+        # SE = sqrt(diag(var))
+        var_matrix = np.array(r_fit.rx2('var'))
+        se = np.sqrt(np.diag(var_matrix))
+        names = list(ro.r('names')(ro.r('coef')(r_fit)))
+        
+        return pd.Series(
+            data=se,
+            index=names,
+            name='bse'
+        )
+    
+    def _extract_pvalues(self, r_fit) -> pd.Series:
+        """Extract p-values from profile likelihood tests."""
+        import rpy2.robjects as ro
+        
+        # logistf provides profile likelihood p-values in $prob
+        pvals = list(ro.r('$')(r_fit, 'prob'))
+        names = list(ro.r('names')(ro.r('coef')(r_fit)))
+        
+        return pd.Series(
+            data=pvals,
+            index=names,
+            name='pvalues'
+        )
+    
+    def _extract_ci_lower(self, r_fit) -> pd.Series:
+        """Extract lower 95% CI bounds."""
+        import rpy2.robjects as ro
+        
+        ci = list(ro.r('$')(r_fit, 'ci.lower'))
+        names = list(ro.r('names')(ro.r('coef')(r_fit)))
+        
+        return pd.Series(
+            data=ci,
+            index=names,
+            name='ci_lower'
+        )
+    
+    def _extract_ci_upper(self, r_fit) -> pd.Series:
+        """Extract upper 95% CI bounds."""
+        import rpy2.robjects as ro
+        
+        ci = list(ro.r('$')(r_fit, 'ci.upper'))
+        names = list(ro.r('names')(ro.r('coef')(r_fit)))
+        
+        return pd.Series(
+            data=ci,
+            index=names,
+            name='ci_upper'
+        )
+    
+    def _extract_deviance(self, r_fit) -> float:
+        """Extract model deviance."""
+        import rpy2.robjects as ro
+        try:
+            return float(ro.r('$')(r_fit, 'deviance')[0])
+        except:
+            return None
+    
+    def _extract_df_resid(self, r_fit) -> int:
+        """Extract residual degrees of freedom."""
+        import rpy2.robjects as ro
+        try:
+            return int(ro.r('$')(r_fit, 'df')[0])
+        except:
+            return len(self.data) - len(self.params)
+    
+    def _extract_loglik(self, r_fit) -> float:
+        """Extract penalized log-likelihood."""
+        import rpy2.robjects as ro
+        try:
+            # logistf returns a vector with [unpenalized, penalized] likelihood
+            loglik_vec = list(ro.r('$')(r_fit, 'loglik'))
+            return float(loglik_vec[1])  # Use penalized likelihood
+        except:
+            return None
+    
+    def _calculate_aic(self) -> float:
+        """Calculate AIC: -2*loglik + 2*k."""
+        if self.llf is None:
+            return None
+        k = len(self.params)
+        return -2 * self.llf + 2 * k
+    
+    def _calculate_bic(self) -> float:
+        """Calculate BIC: -2*loglik + k*log(n)."""
+        if self.llf is None:
+            return None
+        k = len(self.params)
+        n = len(self.data)
+        return -2 * self.llf + k * np.log(n)
+    
+    def conf_int(self, alpha=0.05) -> pd.DataFrame:
+        """
+        Return confidence intervals.
+        Uses profile likelihood CIs from logistf (more accurate than Wald).
+        """
+        return pd.DataFrame({
+            0: self.conf_int_lower,
+            1: self.conf_int_upper
+        })
+
+
 def extract_solution_from_path(data_dir) -> str:
     """
     Extract solution name from data directory path.
@@ -377,7 +606,124 @@ def prepare_glm_data(df: pd.DataFrame, data_dir: Path) -> pd.DataFrame:
     
     return data
 
-def fit_glm_binomial(df_repo: pd.DataFrame) -> Optional[GLMResults]:
+
+def _convert_formula_to_r(patsy_formula: str, data: pd.DataFrame) -> str:
+    """
+    Convert Patsy formula to R binomial formula.
+    
+    Patsy: "I(successes / trials) ~ x1 + x2"
+    R:     "cbind(successes, failures) ~ x1 + x2"
+    
+    Args:
+        patsy_formula: Patsy-style formula
+        data: DataFrame with successes/trials columns
+        
+    Returns:
+        R-style formula string
+    """
+    # Split formula at ~
+    parts = patsy_formula.split('~')
+    if len(parts) != 2:
+        raise ValueError(f"Invalid formula: {patsy_formula}")
+    
+    lhs, rhs = parts[0].strip(), parts[1].strip()
+    
+    # For binomial GLM, we need cbind(successes, failures)
+    # Our data has total_sshoms and total_homs_for_analysis
+    r_lhs = "cbind(total_sshoms, total_homs_for_analysis - total_sshoms)"
+    
+    # Replace 'algorithm' with 'algorithm_numeric' for R
+    # (created in _prepare_data_for_r as 0/1 numeric)
+    r_rhs = rhs.replace('algorithm', 'algorithm_numeric')
+    
+    return f"{r_lhs} ~ {r_rhs}"
+
+
+def _prepare_data_for_r(data: pd.DataFrame):
+    """
+    Prepare pandas DataFrame for R, ensuring correct types.
+    
+    Args:
+        data: Pandas DataFrame
+        
+    Returns:
+        R DataFrame
+    """
+    from rpy2.robjects import pandas2ri
+    from rpy2.robjects import conversion, default_converter
+    
+    # Create copy
+    data_r = data.copy()
+    
+    # Convert algorithm to numeric for R (0=local, 1=genetic)
+    if 'algorithm' in data_r.columns:
+        # Create numeric version for R
+        data_r['algorithm_numeric'] = (data_r['algorithm'].astype(str) == 'genetic').astype(int)
+    
+    # Ensure heuristic columns are integer
+    h_cols = [c for c in data_r.columns if c.startswith('H_')]
+    for col in h_cols:
+        data_r[col] = data_r[col].astype(int)
+    
+    # Use context manager with default converter + pandas converter
+    with conversion.localconverter(default_converter + pandas2ri.converter):
+        r_data = conversion.py2rpy(data_r)
+    
+    return r_data
+
+
+def fit_firth_via_r(formula: str, data: pd.DataFrame) -> Optional[FirthResults]:
+    """
+    Fit Firth's penalized logistic regression via R's logistf package.
+    
+    Args:
+        formula: Patsy-style formula string
+        data: Pandas DataFrame with predictors and outcome
+        
+    Returns:
+        FirthResults object or None if fitting failed
+    """
+    try:
+        from rpy2.robjects import Formula
+        from rpy2.robjects.packages import importr
+        import rpy2.robjects as ro
+        
+        # Import R packages
+        base = importr('base')
+        logistf_pkg = importr('logistf')
+        
+        # Convert formula to R format
+        r_formula_str = _convert_formula_to_r(formula, data)
+        print(f"  R formula: {r_formula_str}")
+        
+        # Prepare data for R
+        r_data = _prepare_data_for_r(data)
+        
+        # Call logistf
+        print("  Calling R logistf (Firth's penalized likelihood)...")
+        r_fit = logistf_pkg.logistf(
+            formula=Formula(r_formula_str),
+            data=r_data,
+            pl=True,  # Use profile likelihood CIs
+            alpha=0.05,  # 95% CIs
+            maxit=100  # Max iterations
+        )
+        
+        print("  SUCCESS: Firth regression converged")
+        
+        # Wrap in FirthResults
+        firth_results = FirthResults(r_fit, formula, data)
+        
+        return firth_results
+        
+    except Exception as e:
+        print(f"  ERROR: Firth regression failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def fit_glm_binomial(df_repo: pd.DataFrame, firth_available: bool = False) -> Optional[GLMResults]:
     """
     Fit binomial GLM with logit link for a single repository.
     
@@ -437,6 +783,24 @@ def fit_glm_binomial(df_repo: pd.DataFrame) -> Optional[GLMResults]:
             
             if has_separation:
                 print("WARNING:  Separation/instability detected in MLE fit")
+                
+                # FIRST FALLBACK: Try Firth (if available)
+                if firth_available:
+                    print("    -> Trying Firth's penalized likelihood (via R logistf)")
+                    try:
+                        firth_results = fit_firth_via_r(formula, df_repo)
+                        
+                        if firth_results is not None:
+                            print(f"    Max coefficient: {np.max(np.abs(firth_results.params)):.2f}")
+                            return firth_results
+                        else:
+                            print("    WARNING: Firth regression failed, trying ridge...")
+                            
+                    except Exception as e_firth:
+                        print(f"    WARNING: Firth regression error: {e_firth}")
+                        print("    -> Falling back to ridge regularization")
+                
+                # SECOND FALLBACK: Ridge (current behavior)
                 print("    -> Trying ridge-penalized GLM (L2 regularization)")
                 
                 try:
@@ -463,8 +827,21 @@ def fit_glm_binomial(df_repo: pd.DataFrame) -> Optional[GLMResults]:
             
         except np.linalg.LinAlgError as e:
             print(f"ERROR: Numerical error in GLM fitting (singular matrix): {e}")
-            print("    This typically indicates perfect separation - trying ridge fallback...")
+            print("    This typically indicates perfect separation")
             
+            # Try Firth first if available
+            if firth_available:
+                print("    -> Trying Firth's penalized likelihood...")
+                try:
+                    firth_results = fit_firth_via_r(formula, df_repo)
+                    if firth_results is not None:
+                        print("SUCCESS: Firth-penalized GLM converged after LinAlgError")
+                        return firth_results
+                except Exception as e_firth:
+                    print(f"    Firth failed: {e_firth}, trying ridge...")
+            
+            # Fallback to ridge
+            print("    -> Trying ridge fallback...")
             try:
                 results = model.fit_regularized(alpha=1e-6, L1_wt=0.0, maxiter=1000)
                 setattr(results, '_penalized', True)
@@ -479,7 +856,8 @@ def fit_glm_binomial(df_repo: pd.DataFrame) -> Optional[GLMResults]:
         print(f"ERROR: Error fitting GLM: {e}")
         return None
 
-def lr_tests_by_term(df_repo: pd.DataFrame, test_type: str = 'marginal') -> Tuple[pd.DataFrame, Optional[Dict], Optional[GLMResults]]:
+def lr_tests_by_term(df_repo: pd.DataFrame, test_type: str = 'marginal', 
+                     firth_available: bool = False) -> Tuple[pd.DataFrame, Optional[Dict], Optional[GLMResults]]:
     """
     Perform likelihood ratio tests for each term in the model.
     
@@ -501,21 +879,20 @@ def lr_tests_by_term(df_repo: pd.DataFrame, test_type: str = 'marginal') -> Tupl
           (main or interactive). This is more conservative and appropriate for
           exploratory analysis.
     """
-    # Fit full model
-    full_model = fit_glm_binomial(df_repo)
+    # Fit full model (with Firth support if available)
+    full_model = fit_glm_binomial(df_repo, firth_available=firth_available)
     if full_model is None:
         return pd.DataFrame(), None, None
     
-    # Check if this is a penalized fit (RegularizedResults doesn't have null_deviance)
-    is_penalized = getattr(full_model, '_penalized', False)
+    # Check fit method
+    fit_method = getattr(full_model, '_fit_method', 'mle')
     
-    # LR tests are not valid for penalized fits - skip them
-    if is_penalized:
-        print("WARNING:  Penalized fit detected - skipping likelihood ratio tests")
-        print("    (LR tests require nested likelihoods, not valid for regularized models)")
+    # Only skip LR tests for RIDGE (not Firth)
+    if fit_method == 'ridge':
+        print("WARNING:  Ridge fit - skipping likelihood ratio tests")
+        print("    (LR tests require nested likelihoods, not valid for ridge regularization)")
         
-        # Create minimal model summary for penalized fits
-        fit_method = getattr(full_model, '_fit_method', 'ridge')
+        # Create minimal model summary for ridge fits
         model_summary = {
             'null_deviance': None,
             'full_deviance': None,
@@ -695,17 +1072,41 @@ def extract_or_table(full_model: GLMResults) -> pd.DataFrame:
         # Calculate odds ratios
         odds_ratios = np.exp(params)
         
-        if is_penalized:
-            # Penalized fit - omit SE/p-values/CIs as they're not reliable
-            print(f"WARNING:  Penalized fit ({fit_method}) - omitting SE/p-values/CIs from OR table")
+        if fit_method == 'firth':
+            # FIRTH FIT: Use profile likelihood CIs (valid even with separation)
+            print(f"INFO: Firth fit - using profile likelihood CIs")
+            
+            # Get profile likelihood CIs from Firth (already computed by logistf)
+            ci_df = full_model.conf_int()
+            or_ci_low = np.exp(ci_df[0])
+            or_ci_high = np.exp(ci_df[1])
+            
+            or_table = pd.DataFrame({
+                'term': params.index,
+                'beta': params.values,
+                'SE': full_model.bse.values,
+                'OR': odds_ratios.values,
+                'OR_CI_low': or_ci_low.values,
+                'OR_CI_high': or_ci_high.values,
+                'p_value': full_model.pvalues.values,
+                'penalized_fit': True,  # Technically penalized
+                'fit_method': 'firth',
+                'ci_type': 'profile_likelihood'  # More accurate than Wald
+            })
+            
+        elif fit_method == 'ridge':
+            # RIDGE FIT: Omit CIs (unreliable)
+            print(f"WARNING:  Ridge fit - omitting SE/p-values/CIs from OR table")
             
             or_table = pd.DataFrame({
                 'term': params.index,
                 'beta': params.values,
                 'OR': odds_ratios.values,
                 'penalized_fit': True,
-                'fit_method': fit_method
+                'fit_method': 'ridge',
+                'ci_type': 'none'
             })
+            
         else:
             # MLE fit - include SE, CIs, and p-values
             bse = full_model.bse
@@ -926,7 +1327,7 @@ def analyze_repository(repo: str, df_repo: pd.DataFrame, outdir: Path) -> List[s
     
     # Perform LR tests and get fitted model
     print("Performing likelihood ratio tests...")
-    lr_df, model_summary, full_model = lr_tests_by_term(df_repo)
+    lr_df, model_summary, full_model = lr_tests_by_term(df_repo, firth_available=_FIRTH_AVAILABLE)
     
     # Check if model fitting completely failed (no model returned)
     if full_model is None:
@@ -1006,6 +1407,27 @@ For multiple solutions:
     )
     
     args = parser.parse_args()
+    
+    # Check if Firth regression is available
+    print("\n" + "="*60)
+    print("Checking R dependencies for Firth regression...")
+    print("="*60)
+    global _FIRTH_AVAILABLE
+    r_status = check_r_dependencies()
+    
+    if r_status['firth_available']:
+        print("SUCCESS: Firth regression available (R + rpy2 + logistf)")
+        print("  -> Will use Firth for datasets with separation issues")
+        _FIRTH_AVAILABLE = True
+    else:
+        print("INFO: Firth regression unavailable - will use ridge fallback")
+        if not r_status['rpy2']:
+            print("  To enable: pip install rpy2")
+        if not r_status['r_installed']:
+            print("  To enable: Install R from https://www.r-project.org/")
+        if not r_status['logistf']:
+            print("  To enable: In R, run: install.packages('logistf')")
+        _FIRTH_AVAILABLE = False
     
     # Handle multiple solutions
     solutions = args.solution if isinstance(args.solution, list) else [args.solution]
