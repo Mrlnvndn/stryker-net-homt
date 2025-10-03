@@ -1,64 +1,65 @@
 #Requires -Version 7
 param(
   [string]$ReposRoot = 'C:\Users\MerlijnU\source\repos\TimeProviderExtensions',
-  [string]$ReportOutputDir = 'C:\Users\MerlijnU\outputs\Marsen.NetCore.Dojo',
+  [string]$ReportOutputDir = 'C:\Users\MerlijnU\outputs\TimeProviderExtensions',
   [int]   $RepeatCount = 5,
-  [string[]]$RandomRowArgs = @(),   # only applied to OA01 ("random HOM generator")
   [switch]$DryRun
 )
 
 $ErrorActionPreference = 'Stop'
-$null = New-Item -ItemType Directory -Path $ReportOutputDir -Force | Out-Null
-
-# Heuristic factor mapping
-$HMap_old = @{
-  H1 = 'CodeLocation'
-  H2 = 'EmptyAssessingTests'
-  H3 = 'MutatorType'
-  H4 = 'MaxSizeLimit'
-  H5 = 'OverlappingTests'
-  H6 = 'SyntaxNodeConflict'
+if (-not $DryRun) {
+  $null = New-Item -ItemType Directory -Path $ReportOutputDir -Force | Out-Null
 }
+
+# # Heuristic factor mapping
+# $HMap_old = @{
+#   H1='CodeLocation'
+#   H2='EmptyAssessingTests'
+#   H3='MutatorType'
+#   H4='MaxSizeLimit'
+#   H5='OverlappingTests'
+#   H6='SyntaxNodeConflict'
+# }
 
 # Taguchi L12(2^11) — OA01 reserved for "random" condition
-$OA_L12_wrong = @(
-  @{H1 = 1; H2 = 1; H3 = 1; H4 = 1; H5 = 1; H6 = 1 }
-  @{H1 = 1; H2 = 1; H3 = 1; H4 = 2; H5 = 2; H6 = 2 }
-  @{H1 = 1; H2 = 2; H3 = 2; H4 = 1; H5 = 1; H6 = 2 }
-  @{H1 = 1; H2 = 2; H3 = 2; H4 = 2; H5 = 2; H6 = 1 }
-  @{H1 = 2; H2 = 1; H3 = 2; H4 = 1; H5 = 2; H6 = 1 }
-  @{H1 = 2; H2 = 1; H3 = 2; H4 = 2; H5 = 1; H6 = 2 }
-  @{H1 = 2; H2 = 2; H3 = 1; H4 = 1; H5 = 2; H6 = 2 }
-  @{H1 = 2; H2 = 2; H3 = 1; H4 = 2; H5 = 1; H6 = 1 }
-  @{H1 = 1; H2 = 1; H3 = 2; H4 = 1; H5 = 2; H6 = 2 }
-  @{H1 = 1; H2 = 1; H3 = 2; H4 = 2; H5 = 1; H6 = 1 }
-  @{H1 = 2; H2 = 2; H3 = 2; H4 = 1; H5 = 1; H6 = 1 }
-  @{H1 = 2; H2 = 2; H3 = 2; H4 = 2; H5 = 2; H6 = 2 }
-)
+# $OA_L12_wrong = @(
+#   @{H1=1;H2=1;H3=1;H4=1;H5=1;H6=1}
+#   @{H1=1;H2=1;H3=1;H4=2;H5=2;H6=2}
+#   @{H1=1;H2=2;H3=2;H4=1;H5=1;H6=2}
+#   @{H1=1;H2=2;H3=2;H4=2;H5=2;H6=1}
+#   @{H1=2;H2=1;H3=2;H4=1;H5=2;H6=1}
+#   @{H1=2;H2=1;H3=2;H4=2;H5=1;H6=2}
+#   @{H1=2;H2=2;H3=1;H4=1;H5=2;H6=2}
+#   @{H1=2;H2=2;H3=1;H4=2;H5=1;H6=1}
+#   @{H1=1;H2=1;H3=2;H4=1;H5=2;H6=2}
+#   @{H1=1;H2=1;H3=2;H4=2;H5=1;H6=1}
+#   @{H1=2;H2=2;H3=2;H4=1;H5=1;H6=1}
+#   @{H1=2;H2=2;H3=2;H4=2;H5=2;H6=2}
+# )
 
-$HMapOld = @{
-  H1 = 'CodeLocation'
-  H2 = 'EmptyAssessingTests'
-  H3 = 'MutatorType'
-  H4 = 'MaxSizeLimit'
-  H5 = 'OverlappingTests'
-  H6 = 'SyntaxNodeConflict'
-}
+# $HMapOld = @{
+#   H1='CodeLocation'
+#   H2='EmptyAssessingTests'
+#   H3='MutatorType'
+#   H4='MaxSizeLimit'
+#   H5='OverlappingTests'
+#   H6='SyntaxNodeConflict'
+# }
 
-$OA_L12_h4h5swap = @(
-  @{H1 = 1; H2 = 1; H3 = 1; H4 = 1; H5 = 1; H6 = 1 } # OA01
-  @{H1 = 1; H2 = 1; H3 = 1; H4 = 2; H5 = 2; H6 = 2 } 
-  @{H1 = 1; H2 = 2; H3 = 2; H4 = 1; H5 = 1; H6 = 2 }
-  @{H1 = 1; H2 = 2; H3 = 2; H4 = 2; H5 = 2; H6 = 1 }
-  @{H1 = 2; H2 = 1; H3 = 2; H4 = 2; H5 = 1; H6 = 1 } # OA07
-  @{H1 = 2; H2 = 1; H3 = 2; H4 = 1; H5 = 2; H6 = 2 } # OA08
-  @{H1 = 2; H2 = 2; H3 = 1; H4 = 2; H5 = 1; H6 = 2 } # OA11
-  @{H1 = 2; H2 = 2; H3 = 1; H4 = 1; H5 = 2; H6 = 1 } # OA12
-  @{H1 = 1; H2 = 1; H3 = 2; H4 = 2; H5 = 1; H6 = 2 } 
-  @{H1 = 1; H2 = 1; H3 = 2; H4 = 1; H5 = 2; H6 = 1 }
-  @{H1 = 2; H2 = 2; H3 = 2; H4 = 1; H5 = 1; H6 = 1 } # OA10
-  @{H1 = 2; H2 = 2; H3 = 2; H4 = 2; H5 = 2; H6 = 2 }
-)
+# $OA_L12_h4h5swap = @(
+#   @{H1=1;H2=1;H3=1;H4=1;H5=1;H6=1} # OA01
+#   @{H1=1;H2=1;H3=1;H4=2;H5=2;H6=2} 
+#   @{H1=1;H2=2;H3=2;H4=1;H5=1;H6=2}
+#   @{H1=1;H2=2;H3=2;H4=2;H5=2;H6=1}
+#   @{H1=2;H2=1;H3=2;H4=2;H5=1;H6=1} # OA07
+#   @{H1=2;H2=1;H3=2;H4=1;H5=2;H6=2} # OA08
+#   @{H1=2;H2=2;H3=1;H4=2;H5=1;H6=2} # OA11
+#   @{H1=2;H2=2;H3=1;H4=1;H5=2;H6=1} # OA12
+#   @{H1=1;H2=1;H3=2;H4=2;H5=1;H6=2} 
+#   @{H1=1;H2=1;H3=2;H4=1;H5=2;H6=1}
+#   @{H1=2;H2=2;H3=2;H4=1;H5=1;H6=1} # OA10
+#   @{H1=2;H2=2;H3=2;H4=2;H5=2;H6=2}
+# )
 
 $HMap = @{
   H1 = 'CodeLocation'
@@ -85,6 +86,21 @@ $OA_L12 = @(
   @{H1 = 2; H2 = 2; H3 = 1; H4 = 1; H5 = 2; H6 = 1 } # OA12
 )
 
+$OA_L12_extended = @(
+  @{H1=1;H2=1;H3=1;H4=1;H5=1;H6=1} # OA01
+  @{H1=1;H2=1;H3=1;H4=1;H5=1;H6=2} # OA02
+  @{H1=1;H2=1;H3=2;H4=2;H5=2;H6=1} # OA03
+  @{H1=1;H2=2;H3=1;H4=2;H5=2;H6=1} # OA04
+  @{H1=1;H2=2;H3=2;H4=1;H5=2;H6=2} # OA05
+  @{H1=1;H2=2;H3=2;H4=2;H5=1;H6=2} # OA06
+  @{H1=2;H2=1;H3=2;H4=2;H5=1;H6=1} # OA07
+  @{H1=2;H2=1;H3=2;H4=1;H5=2;H6=2} # OA08
+  @{H1=2;H2=1;H3=1;H4=2;H5=2;H6=2} # OA09
+  @{H1=2;H2=2;H3=2;H4=1;H5=1;H6=1} # OA10
+  @{H1=2;H2=2;H3=1;H4=2;H5=1;H6=2} # OA11
+  @{H1=2;H2=2;H3=1;H4=1;H5=2;H6=1} # OA12
+)
+
 $Algorithms = @('genetic', 'local')
 
 # Discover solutions reliably
@@ -99,43 +115,38 @@ foreach ($sln in $solutions) {
   foreach ($alg in $Algorithms) {
     for ($i = 0; $i -lt $OA_L12.Count; $i++) {
       $rowIndex = $i + 1
-      $row = $OA_L12[$i]
-      $isRandom = ($rowIndex -eq 1)
+      $isOA01   = ($rowIndex -eq 1)
 
       # Output dirs
       $baseDir = Join-Path $ReportOutputDir $slnName
       $algDir = Join-Path $baseDir       $alg
       $oaDir = Join-Path $algDir        ("OA{0:00}" -f $rowIndex)
 
-      $hset = @()
-      foreach ($k in 'H1', 'H2', 'H3', 'H4', 'H5', 'H6') {
-        if ($row[$k] -eq 2) { $hset += $HMap[$k] }
-      }
-      
-      # Determine heuristic key for display
-      if ($hset.Count -eq 0) {
-        $heurKey = 'none'  # OA01 case: all heuristics OFF
-      }
-      else {
-        $heurKey = $hset -join '-'
+      # Skip if directory already exists
+      if (Test-Path $oaDir) {
+        Write-Host ("[{0}] OA#{1:00} alg={2} SKIP (directory already exists: {3})" -f $slnName, $rowIndex, $alg, $oaDir)
+        continue
       }
 
-      # Handle special random mode for OA01 if RandomRowArgs are provided
-      if ($isRandom -and $RandomRowArgs.Count -gt 0) {
+      if ($isOA01) {
+        # OA01 uses no heuristics
         foreach ($rep in 1..$RepeatCount) {
           $runOutDir = Join-Path $oaDir ("rep{0:00}" -f $rep)
-          $null = New-Item -ItemType Directory -Path $runOutDir -Force | Out-Null
+          if (-not $DryRun) {
+            $null = New-Item -ItemType Directory -Path $runOutDir -Force | Out-Null
+          }
 
           $args = @(
             'stryker',
             '--homt-validate',
             '--homt-algorithm', $alg,
             '--reporter', 'HomCsv',
-            '--output', $runOutDir
-          ) + $RandomRowArgs
+            '--output', $runOutDir,
+            '--homt-heuristics', 'none'
+          )
 
           $cmdPretty = 'dotnet ' + ($args -join ' ')
-          Write-Host ("[{0}] OA#{1:00} alg={2} heur=random rep={3}" -f $slnName, $rowIndex, $alg, $rep)
+          Write-Host ("[{0}] OA#{1:00} alg={2} heur=none rep={3}" -f $slnName, $rowIndex, $alg, $rep)
           Write-Host "  $cmdPretty"
 
           if (-not $DryRun) {
@@ -150,10 +161,23 @@ foreach ($sln in $solutions) {
         }
       }
       else {
-        # Standard heuristic processing (including OA01 with no heuristics)
+        # Build heuristic set (include if level=2)
+        $row = $OA_L12[$i]
+        $hset = @()
+        foreach ($k in 'H1','H2','H3','H4','H5','H6') {
+          if ($row[$k] -eq 2) { $hset += $HMap[$k] }
+        }
+        if ($hset.Count -eq 0) {
+          Write-Host ("[{0}] OA#{1:00} alg={2} SKIP (no heuristics ON)" -f $slnName, $rowIndex, $alg)
+          continue
+        }
+        $heurKey = $hset -join '-'
+
         foreach ($rep in 1..$RepeatCount) {
           $runOutDir = Join-Path $oaDir ("rep{0:00}" -f $rep)
-          $null = New-Item -ItemType Directory -Path $runOutDir -Force | Out-Null
+          if (-not $DryRun) {
+            $null = New-Item -ItemType Directory -Path $runOutDir -Force | Out-Null
+          }
 
           $args = @(
             'stryker',
