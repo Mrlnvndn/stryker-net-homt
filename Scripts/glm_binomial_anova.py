@@ -10,8 +10,8 @@ Usage:
     python glm_binomial_anova.py --solution Solution1 Solution2 Solution3
     
 Expected data structure:
-    Input:  C:\\Users\\MerlijnU\\outputs\\{repo}\\{solution}\\**/mutation-report-hom.csv
-    Output: C:\\Users\\MerlijnU\\analysis\\{solution}\\anova\\glm_*.csv
+    Input:  {base}\\outputs\\{repo}\\{solution}\\**/mutation-report-hom.csv
+    Output: {base}\\analysis\\{solution}\\anova\\glm_*.csv
     
 Expected CSV columns (from analyze_homcsv.py output):
 - solution, algorithm, total_homs, sshom_2, sshom_3, sshom_4, used_heuristics
@@ -46,6 +46,16 @@ HEURISTICS = [
     'MaxSizeLimit',
     'SyntaxNodeConflict'
 ]
+
+# Canonical mapping for heuristic column names (avoid substring collisions)
+HEURISTIC_MAP = {
+    'CodeLocation': 'H_CodeLocation',
+    'EmptyAssessingTests': 'H_EmptyAssessingTests',
+    'MutatorType': 'H_MutatorType',
+    'OverlappingTests': 'H_OverlappingTests',
+    'MaxSizeLimit': 'H_MaxSizeLimit',
+    'SyntaxNodeConflict': 'H_SyntaxNodeConflict'
+}
 
 def extract_solution_from_path(data_dir) -> str:
     """
@@ -326,19 +336,26 @@ def prepare_glm_data(df: pd.DataFrame, data_dir: Path) -> pd.DataFrame:
     # Formula: (sshom_2 + sshom_3 + sshom_4) / total_homs_with_filtered * 100 - matches analyze_homcsv.py
     data['success_rate_pct'] = 100.0 * data['total_sshoms'] / data['total_homs_for_analysis']
     
-    # Ensure algorithm is categorical with consistent reference level (local as baseline)
-    data['algorithm'] = data['algorithm'].str.lower().str.strip()
-    algorithm_values = data['algorithm'].unique()
-    print(f"Found algorithms: {algorithm_values}")
+    # Normalize algorithm factor to exactly {'local', 'genetic'} with strict matching
+    print("Normalizing algorithm factor...")
+    data['algorithm'] = (
+        data['algorithm'].astype(str).str.lower().str.strip()
+        .replace({r'.*genetic.*': 'genetic', r'.*local.*': 'local'}, regex=True)
+    )
     
-    # Set categorical with local as reference (first) level
-    if 'local' in algorithm_values and 'genetic' in algorithm_values:
-        data['algorithm'] = pd.Categorical(data['algorithm'], 
-                                         categories=['local', 'genetic'], 
-                                         ordered=False)
-    else:
-        # Use whatever algorithms we have
-        data['algorithm'] = pd.Categorical(data['algorithm'])
+    # Force categorical with local as baseline (reference level)
+    data['algorithm'] = pd.Categorical(data['algorithm'], 
+                                      categories=['local', 'genetic'], 
+                                      ordered=False)
+    
+    # Verify normalization worked
+    algorithm_counts = data['algorithm'].value_counts().to_dict()
+    print(f"Normalized algorithm counts: {algorithm_counts}")
+    
+    if data['algorithm'].isna().any():
+        n_invalid = data['algorithm'].isna().sum()
+        print(f"WARNING:  Warning: {n_invalid} rows have invalid algorithm values (not local/genetic) - dropping")
+        data = data.dropna(subset=['algorithm'])
     
     # Ensure heuristic columns are integer (0/1)
     for heuristic in HEURISTICS:
@@ -380,14 +397,21 @@ def fit_glm_binomial(df_repo: pd.DataFrame) -> Optional[GLMResults]:
             print("Warning: Need at least 2 algorithm levels for GLM")
             return None
         
-        # Prepare formula with main effects and Algorithm×Heuristic interactions
-        heuristic_terms = [f'H_{h}' for h in HEURISTICS]
-        interaction_terms = [f'algorithm:H_{h}' for h in HEURISTICS]
+        # Identify which heuristics actually vary in this dataset
+        heuristic_cols = sorted([c for c in df_repo.columns if c.startswith('H_')])
+        varying_heuristics = [c for c in heuristic_cols if df_repo[c].nunique() > 1]
         
-        # Build formula: response ~ Algorithm + H1 + H2 + ... + Algorithm:H1 + Algorithm:H2 + ...
-        main_terms = ['algorithm'] + heuristic_terms
-        all_terms = main_terms + interaction_terms
-        formula = f"I(total_sshoms / total_homs_for_analysis) ~ {' + '.join(all_terms)}"
+        print(f"Found {len(heuristic_cols)} heuristic columns, {len(varying_heuristics)} vary")
+        
+        if not varying_heuristics:
+            # No heuristics vary - test algorithm only
+            formula = "I(total_sshoms / total_homs_for_analysis) ~ algorithm"
+            print("WARNING:  No varying heuristics - testing algorithm effect only")
+        else:
+            # Build formula from varying heuristics only
+            interaction_terms = [f'algorithm:{h}' for h in varying_heuristics]
+            all_terms = ['algorithm'] + varying_heuristics + interaction_terms
+            formula = f"I(total_sshoms / total_homs_for_analysis) ~ {' + '.join(all_terms)}"
         
         print(f"Fitting GLM with formula: {formula}")
         
@@ -400,35 +424,116 @@ def fit_glm_binomial(df_repo: pd.DataFrame) -> Optional[GLMResults]:
             freq_weights=df_repo['total_homs_for_analysis']
         )
         
-        results = model.fit()
-        
-        # Check for convergence
-        if not results.converged:
-            print("Warning: GLM did not converge")
-            return None
+        # Attempt standard MLE GLM fit
+        try:
+            results = model.fit(maxiter=200, disp=False)
             
-        return results
+            # Detect separation/instability: non-convergence, NaN/inf params, or extreme coefficients
+            has_separation = (
+                not results.converged or
+                np.any(~np.isfinite(results.params)) or
+                (np.max(np.abs(results.params)) > 25)
+            )
+            
+            if has_separation:
+                print("WARNING:  Separation/instability detected in MLE fit")
+                print("    -> Trying ridge-penalized GLM (L2 regularization)")
+                
+                try:
+                    # Use ridge regularization (alpha=1e-6, L1_wt=0 means pure ridge)
+                    results = model.fit_regularized(alpha=1e-6, L1_wt=0.0, maxiter=1000)
+                    
+                    # Flag this as penalized for downstream handling
+                    setattr(results, '_penalized', True)
+                    setattr(results, '_fit_method', 'ridge')
+                    
+                    print("SUCCESS: Ridge-penalized GLM converged successfully")
+                    print(f"    Max coefficient: {np.max(np.abs(results.params)):.2f}")
+                    
+                except Exception as e_ridge:
+                    print(f"ERROR: Ridge-penalized GLM failed: {e_ridge}")
+                    return None
+            else:
+                # MLE converged normally
+                setattr(results, '_penalized', False)
+                setattr(results, '_fit_method', 'mle')
+                print(f"SUCCESS: MLE GLM converged (max |beta| = {np.max(np.abs(results.params)):.2f})")
+            
+            return results
+            
+        except np.linalg.LinAlgError as e:
+            print(f"ERROR: Numerical error in GLM fitting (singular matrix): {e}")
+            print("    This typically indicates perfect separation - trying ridge fallback...")
+            
+            try:
+                results = model.fit_regularized(alpha=1e-6, L1_wt=0.0, maxiter=1000)
+                setattr(results, '_penalized', True)
+                setattr(results, '_fit_method', 'ridge')
+                print("SUCCESS: Ridge-penalized GLM converged after LinAlgError")
+                return results
+            except Exception as e_final:
+                print(f"ERROR: All fitting attempts failed: {e_final}")
+                return None
         
     except Exception as e:
-        print(f"Error fitting GLM: {e}")
+        print(f"ERROR: Error fitting GLM: {e}")
         return None
 
-def lr_tests_by_term(df_repo: pd.DataFrame) -> pd.DataFrame:
+def lr_tests_by_term(df_repo: pd.DataFrame, test_type: str = 'marginal') -> Tuple[pd.DataFrame, Optional[Dict], Optional[GLMResults]]:
     """
     Perform likelihood ratio tests for each term in the model.
     
     Args:
         df_repo: Data for a single repository
+        test_type: Type of test to perform:
+            - 'marginal': Tests main effect + interaction together (H1 + Alg:H1)
+                         Answers: "Does this heuristic matter at all?"
+            - 'conditional': Tests main effect only, keeping interaction (Type III)
+                           Answers: "Does main effect matter, controlling for interaction?"
         
     Returns:
-        DataFrame with LR test results
+        Tuple of (lr_df, model_summary, full_model):
+            - lr_df: DataFrame with LR test results including FDR q-values
+            - model_summary: Dict with model-level stats
+            - full_model: Fitted GLM results object (for reuse in OR table)
+        
+    Note: Default is 'marginal' which tests whether the heuristic has any effect
+          (main or interactive). This is more conservative and appropriate for
+          exploratory analysis.
     """
     # Fit full model
     full_model = fit_glm_binomial(df_repo)
     if full_model is None:
-        return pd.DataFrame()
+        return pd.DataFrame(), None, None
     
-    # Get null deviance for effect size calculation
+    # Check if this is a penalized fit (RegularizedResults doesn't have null_deviance)
+    is_penalized = getattr(full_model, '_penalized', False)
+    
+    # LR tests are not valid for penalized fits - skip them
+    if is_penalized:
+        print("WARNING:  Penalized fit detected - skipping likelihood ratio tests")
+        print("    (LR tests require nested likelihoods, not valid for regularized models)")
+        
+        # Create minimal model summary for penalized fits
+        fit_method = getattr(full_model, '_fit_method', 'ridge')
+        model_summary = {
+            'null_deviance': None,
+            'full_deviance': None,
+            'mcfadden_r2': None,
+            'aic': None,
+            'bic': None,
+            'n_obs': len(df_repo),
+            'df_null': None,
+            'df_resid': full_model.df_resid if hasattr(full_model, 'df_resid') else None,
+            'fit_method': fit_method,
+            'penalized_fit': True,
+            'total_trials': df_repo['total_homs_for_analysis'].sum()
+        }
+        
+        # Return empty LR table, model summary, and full model for OR extraction
+        return pd.DataFrame(), model_summary, full_model
+    
+    # For MLE fits, proceed with LR tests
     null_deviance = full_model.null_deviance
     full_deviance = full_model.deviance
     
@@ -448,9 +553,19 @@ def lr_tests_by_term(df_repo: pd.DataFrame) -> pd.DataFrame:
                 # Remove algorithm and all its interactions
                 reduced_terms = heuristic_terms.copy()
             elif term.startswith('H_') and ':' not in term:
-                # Remove main effect and its interaction
-                reduced_terms = ['algorithm'] + [t for t in heuristic_terms if t != term]
-                reduced_terms.extend([t for t in interaction_terms if term not in t])
+                # Heuristic main effect test
+                if test_type == 'marginal':
+                    # MARGINAL TEST: Remove main effect AND its interaction
+                    # Tests: "Does this heuristic matter at all (main or interactive)?"
+                    reduced_terms = ['algorithm'] + [t for t in heuristic_terms if t != term]
+                    reduced_terms.extend([t for t in interaction_terms if term not in t])
+                elif test_type == 'conditional':
+                    # CONDITIONAL TEST: Remove only main effect, keep interaction (Type III)
+                    # Tests: "Does main effect matter, controlling for interaction?"
+                    reduced_terms = ['algorithm'] + [t for t in heuristic_terms if t != term]
+                    reduced_terms.extend(interaction_terms)  # Keep all interactions
+                else:
+                    raise ValueError(f"Unknown test_type: {test_type}. Use 'marginal' or 'conditional'")
             elif ':' in term:
                 # Remove just the interaction term
                 reduced_terms = ['algorithm'] + heuristic_terms
@@ -480,8 +595,11 @@ def lr_tests_by_term(df_repo: pd.DataFrame) -> pd.DataFrame:
                 from scipy.stats import chi2
                 p_value = 1 - chi2.cdf(lr_stat, df_diff)
                 
-                # Partial deviance explained
-                partial_deviance_explained = lr_stat / null_deviance if null_deviance > 0 else 0
+                # Partial deviance explained (only if null_deviance available)
+                if null_deviance and null_deviance > 0:
+                    partial_deviance_explained = lr_stat / null_deviance
+                else:
+                    partial_deviance_explained = None  # Can't calculate for penalized fits
                 
                 lr_results.append({
                     'term': term,
@@ -495,28 +613,73 @@ def lr_tests_by_term(df_repo: pd.DataFrame) -> pd.DataFrame:
             print(f"Warning: LR test failed for term {term}: {e}")
             continue
     
-    # Add model-level statistics
-    if lr_results:
-        mcfadden_r2 = 1 - (full_deviance / null_deviance) if null_deviance > 0 else 0
-        lr_results.append({
-            'term': 'MODEL_MCFADDEN_R2',
-            'lr_chi2': mcfadden_r2,
-            'df': np.nan,
-            'p_value': np.nan,
-            'partial_deviance_explained': np.nan
-        })
+    # Convert to DataFrame and add FDR-corrected q-values
+    lr_df = pd.DataFrame(lr_results)
     
-    return pd.DataFrame(lr_results)
+    if not lr_df.empty and 'p_value' in lr_df.columns:
+        # Add Benjamini-Hochberg FDR q-values
+        from statsmodels.stats.multitest import multipletests
+        mask = lr_df['p_value'].notna()
+        if mask.sum() > 0:
+            _, q_values, _, _ = multipletests(lr_df.loc[mask, 'p_value'].values, method='fdr_bh')
+            lr_df.loc[mask, 'q_value'] = q_values
+            print(f"Added FDR q-values (Benjamini-Hochberg) to LR test results")
+        else:
+            lr_df['q_value'] = np.nan
+    
+    # Calculate model-level statistics (returned separately, not mixed with LR tests)
+    model_summary = None
+    if not lr_df.empty:
+        # Add fit method information
+        fit_method = getattr(full_model, '_fit_method', 'mle')
+        penalized = getattr(full_model, '_penalized', False)
+        
+        # Handle penalized vs MLE fits (RegularizedResults has different attributes)
+        if penalized:
+            # RegularizedResults doesn't have null_deviance, aic, bic, df_null
+            model_summary = {
+                'null_deviance': None,
+                'full_deviance': full_deviance,
+                'mcfadden_r2': None,  # Can't calculate without null_deviance
+                'aic': None,
+                'bic': None,
+                'n_obs': len(df_repo),
+                'df_null': None,
+                'df_resid': full_model.df_resid if hasattr(full_model, 'df_resid') else None,
+                'fit_method': fit_method,
+                'penalized_fit': True,
+                'total_trials': df_repo['total_homs_for_analysis'].sum()
+            }
+        else:
+            # Standard MLE fit - most attributes available (check for df_null separately)
+            mcfadden_r2 = 1 - (full_deviance / null_deviance) if null_deviance and null_deviance > 0 else 0
+            
+            model_summary = {
+                'null_deviance': null_deviance,
+                'full_deviance': full_deviance,
+                'mcfadden_r2': mcfadden_r2,
+                'aic': full_model.aic if hasattr(full_model, 'aic') else None,
+                'bic': full_model.bic if hasattr(full_model, 'bic') else None,
+                'n_obs': len(df_repo),
+                'df_null': full_model.df_null if hasattr(full_model, 'df_null') else None,
+                'df_resid': full_model.df_resid if hasattr(full_model, 'df_resid') else None,
+                'fit_method': fit_method,
+                'penalized_fit': False,
+                'total_trials': df_repo['total_homs_for_analysis'].sum()
+            }
+    
+    return lr_df, model_summary, full_model
 
 def extract_or_table(full_model: GLMResults) -> pd.DataFrame:
     """
     Extract odds ratios and confidence intervals from fitted GLM.
+    Handles both MLE and penalized (ridge) fits appropriately.
     
     Args:
         full_model: Fitted GLM results
         
     Returns:
-        DataFrame with coefficients, odds ratios, and CIs
+        DataFrame with coefficients, odds ratios, and CIs (SE/p-values omitted for penalized fits)
     """
     if full_model is None:
         return pd.DataFrame()
@@ -524,24 +687,45 @@ def extract_or_table(full_model: GLMResults) -> pd.DataFrame:
     try:
         # Get parameter estimates
         params = full_model.params
-        bse = full_model.bse
-        pvalues = full_model.pvalues
         
-        # Calculate odds ratios and CIs
+        # Check if this was a penalized fit
+        is_penalized = getattr(full_model, '_penalized', False)
+        fit_method = getattr(full_model, '_fit_method', 'mle')
+        
+        # Calculate odds ratios
         odds_ratios = np.exp(params)
-        or_ci_low = np.exp(params - 1.96 * bse)
-        or_ci_high = np.exp(params + 1.96 * bse)
         
-        # Create results table
-        or_table = pd.DataFrame({
-            'term': params.index,
-            'beta': params.values,
-            'SE': bse.values,
-            'OR': odds_ratios.values,
-            'OR_CI_low': or_ci_low.values,
-            'OR_CI_high': or_ci_high.values,
-            'p_value': pvalues.values
-        })
+        if is_penalized:
+            # Penalized fit - omit SE/p-values/CIs as they're not reliable
+            print(f"WARNING:  Penalized fit ({fit_method}) - omitting SE/p-values/CIs from OR table")
+            
+            or_table = pd.DataFrame({
+                'term': params.index,
+                'beta': params.values,
+                'OR': odds_ratios.values,
+                'penalized_fit': True,
+                'fit_method': fit_method
+            })
+        else:
+            # MLE fit - include SE, CIs, and p-values
+            bse = full_model.bse
+            pvalues = full_model.pvalues
+            
+            # Calculate 95% CIs for odds ratios
+            or_ci_low = np.exp(params - 1.96 * bse)
+            or_ci_high = np.exp(params + 1.96 * bse)
+            
+            or_table = pd.DataFrame({
+                'term': params.index,
+                'beta': params.values,
+                'SE': bse.values,
+                'OR': odds_ratios.values,
+                'OR_CI_low': or_ci_low.values,
+                'OR_CI_high': or_ci_high.values,
+                'p_value': pvalues.values,
+                'penalized_fit': False,
+                'fit_method': fit_method
+            })
         
         # Remove intercept for cleaner output
         or_table = or_table[or_table['term'] != 'Intercept']
@@ -553,14 +737,15 @@ def extract_or_table(full_model: GLMResults) -> pd.DataFrame:
         return pd.DataFrame()
 
 def save_repo_results(repo: str, lr_df: pd.DataFrame, or_df: pd.DataFrame, 
-                     outdir: Path) -> List[str]:
+                     model_summary: Optional[Dict], outdir: Path) -> List[str]:
     """
     Save results for a single repository.
     
     Args:
         repo: Repository name
-        lr_df: Likelihood ratio test results
+        lr_df: Likelihood ratio test results (without McFadden R² mixed in)
         or_df: Odds ratio results
+        model_summary: Dictionary with model-level stats (McFadden R², AIC, BIC, etc.)
         outdir: Output directory
         
     Returns:
@@ -580,18 +765,35 @@ def save_repo_results(repo: str, lr_df: pd.DataFrame, or_df: pd.DataFrame,
         print(f"Saved LR tests: {lr_path}")
         
         # Print significant results to console
-        significant = lr_df[(lr_df['p_value'] < 0.05) & (lr_df['term'] != 'MODEL_MCFADDEN_R2')]
+        significant = lr_df[lr_df['p_value'] < 0.05]
         if not significant.empty:
             print(f"\n=== Significant effects in {repo} (p < 0.05) ===")
             for _, row in significant.iterrows():
                 print(f"  {row['term']}: Chi2 = {row['lr_chi2']:.3f}, df = {row['df']}, p = {row['p_value']:.4f}")
         else:
             print(f"\nNo significant effects found in {repo}")
+    
+    # Save model summary separately (not mixed with LR tests)
+    if model_summary is not None:
+        summary_path = outdir / f"glm_model_summary_{clean_repo}.csv"
+        summary_df = pd.DataFrame([model_summary])
+        summary_df.insert(0, 'repository', repo)  # Add repo column
+        summary_df.to_csv(summary_path, index=False)
+        generated_files.append(summary_path.name)
+        print(f"Saved model summary: {summary_path}")
         
-        # Print McFadden's R²
-        mcfadden = lr_df[lr_df['term'] == 'MODEL_MCFADDEN_R2']
-        if not mcfadden.empty:
-            print(f"McFadden's R² = {mcfadden['lr_chi2'].iloc[0]:.4f}")
+        # Print fit statistics (handle None values for penalized fits)
+        if model_summary.get('penalized_fit'):
+            print(f"Fit method: {model_summary.get('fit_method', 'unknown')} (penalized)")
+            print(f"Note: R², AIC, BIC not available for penalized fits")
+        else:
+            r2 = model_summary.get('mcfadden_r2')
+            aic = model_summary.get('aic')
+            bic = model_summary.get('bic')
+            if r2 is not None:
+                print(f"McFadden's R² = {r2:.4f}")
+            if aic is not None and bic is not None:
+                print(f"AIC = {aic:.2f}, BIC = {bic:.2f}")
     
     # Save OR results
     if not or_df.empty:
@@ -722,17 +924,39 @@ def analyze_repository(repo: str, df_repo: pd.DataFrame, outdir: Path) -> List[s
         print("WARNING: No variation in heuristics, skipping repository")
         return []
     
-    # Perform LR tests
+    # Perform LR tests and get fitted model
     print("Performing likelihood ratio tests...")
-    lr_df = lr_tests_by_term(df_repo)
+    lr_df, model_summary, full_model = lr_tests_by_term(df_repo)
     
-    # Extract odds ratios
-    print("Extracting odds ratios...")
-    full_model = fit_glm_binomial(df_repo)
+    # Check if model fitting completely failed (no model returned)
+    if full_model is None:
+        print("ERROR: ERROR: GLM fitting completely failed - creating error report")
+        error_report = pd.DataFrame({
+            'repository': [repo],
+            'error': ['GLM convergence failed - all fitting methods exhausted'],
+            'n_obs': [len(df_repo)],
+            'algorithms': [str(df_repo['algorithm'].value_counts().to_dict())],
+            'mean_success_rate': [df_repo['success_rate_pct'].mean()],
+            'recommendation': ['Data may have severe separation or other numerical issues']
+        })
+        error_path = outdir / f"glm_error_{re.sub(r'[^\\w\\-_]', '_', repo)}.csv"
+        error_report.to_csv(error_path, index=False)
+        print(f"Saved error report: {error_path}")
+        return [error_path.name]
+    
+    # LR tests may be empty for penalized fits (but model is still valid)
+    if lr_df.empty and model_summary and model_summary.get('penalized_fit'):
+        print("INFO:  Penalized fit: LR tests skipped, proceeding with OR table only")
+    elif lr_df.empty:
+        # This shouldn't happen but handle it
+        print("WARNING:  Warning: No LR test results but model fitted successfully")
+    
+    # Extract odds ratios from the already-fitted full model
+    print("Extracting odds ratios from fitted model...")
     or_df = extract_or_table(full_model)
     
     # Save results and return generated file names
-    return save_repo_results(repo, lr_df, or_df, outdir)
+    return save_repo_results(repo, lr_df, or_df, model_summary, outdir)
 
 def main():
     """Main analysis function."""
@@ -750,12 +974,12 @@ Example usage:
     python glm_binomial_anova.py --solution SolutionA SolutionB --repo RepoX RepoY
     
 For single solution:
-    data_dir = "C:\\Users\\MerlijnU\\outputs\\{repo}\\{solution}"
-    out_dir = "C:\\Users\\MerlijnU\\analysis\\{solution}\\anova"
+    data_dir = "{base}\\outputs\\{repo}\\{solution}"
+    out_dir = "{base}\\analysis\\{solution}\\anova"
     
 For multiple solutions:
-    individual_files_dir = "C:\\Users\\MerlijnU\\analysis\\multi_solution_analysis"
-    aggregated_files_dir = "C:\\Users\\MerlijnU\\analysis\\Anova"
+    individual_files_dir = "{base}\\analysis\\{repo}\\anova"
+    aggregated_files_dir = "{base}\\analysis\\Anova"
         """
     )
     parser.add_argument(
@@ -772,6 +996,13 @@ For multiple solutions:
         nargs='+',
         default=None,
         help="Repository name(s) corresponding to each solution. If not provided, uses solution name(s). Must match number of solutions if provided."
+    )
+    
+    parser.add_argument(
+        "--base",
+        type=str,
+        default="C:\\Users\\MerlijnU",
+        help="Base directory path for outputs and analysis (default: C:\\Users\\MerlijnU)"
     )
     
     args = parser.parse_args()
@@ -802,7 +1033,7 @@ For multiple solutions:
         print(f"Output directory: Solution-specific directories")
     else:
         # Multiple solutions: individual files in solution directories, aggregated in Anova
-        aggregated_out_dir = Path("C:\\Users\\MerlijnU\\analysis\\Anova")
+        aggregated_out_dir = Path(f"{args.base}\\analysis\\Anova")
         print(f"Output directories: Solution-specific directories for individual files")
         print(f"Aggregated files directory: {aggregated_out_dir}")
     
@@ -820,8 +1051,8 @@ For multiple solutions:
             print(f"{'='*40}")
             
             # Construct data directory using repo name
-            # Path structure: C:\Users\MerlijnU\outputs\{repo}\{solution}
-            data_dir = Path(f"C:\\Users\\MerlijnU\\outputs\\{repo}\\{solution}")
+            # Path structure: {base}\outputs\{repo}\{solution}
+            data_dir = Path(f"{args.base}\\outputs\\{repo}\\{solution}")
             print(f"Data directory: {data_dir}")
             
             # Load and prepare data for this solution
@@ -863,7 +1094,7 @@ For multiple solutions:
         for repo in repositories:
             df_repo = combined_data[combined_data['solution'] == repo].copy()
             # Create solution-specific output directory
-            repo_out_dir = Path(f"C:\\Users\\MerlijnU\\analysis\\{repo}\\anova")
+            repo_out_dir = Path(f"{args.base}\\analysis\\{repo}\\anova")
             individual_output_dirs.append(repo_out_dir)
             
             repo_files = analyze_repository(repo, df_repo, repo_out_dir)
@@ -872,9 +1103,9 @@ For multiple solutions:
         # Aggregate results (only if multiple solutions)
         if len(solutions) > 1:
             # Create aggregated output directory
-            aggregated_out_dir = Path("C:\\Users\\MerlijnU\\analysis\\Anova")
+            aggregated_out_dir = Path(f"{args.base}\\analysis\\Anova")
             # Pass the base analysis directory that contains all {repo}/anova/ subdirectories
-            source_dir = Path("C:\\Users\\MerlijnU\\analysis")
+            source_dir = Path(f"{args.base}\\analysis")
             aggregated_file_names = aggregate_results(source_dir, aggregated_out_dir, list(repositories))
             all_generated_files.extend(aggregated_file_names)
         else:
@@ -885,13 +1116,13 @@ For multiple solutions:
         print(f"{'='*60}")
         if len(solutions) == 1:
             # For single solution, get the output directory used
-            single_out_dir = Path(f"C:\\Users\\MerlijnU\\analysis\\{solutions[0]}\\anova")
+            single_out_dir = Path(f"{args.base}\\analysis\\{solutions[0]}\\anova")
             print(f"Results saved to: {single_out_dir}")
         else:
             print("Individual solution results saved to:")
             for i, repo in enumerate(repositories):
                 print(f"  - {repo}: {individual_output_dirs[i]}")
-            print(f"Aggregated results saved to: C:\\Users\\MerlijnU\\analysis\\Anova")
+            print(f"Aggregated results saved to: {args.base}\\analysis\\Anova")
         print("\nGenerated files:")
         
         # List only the files generated in this run
@@ -908,3 +1139,4 @@ For multiple solutions:
 
 if __name__ == "__main__":
     main()
+
