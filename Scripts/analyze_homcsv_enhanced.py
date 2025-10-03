@@ -1,30 +1,125 @@
 #!/usr/bin/env python3
 """
-Enhanced L12 Orthogonal Array Analysis Script
-Generates LaTeX-ready CSV data for three specific plots:
-1. Main effects with 95% CIs (SSHOM success rate and runtime)
-2. Algorithm×Heuristic interaction effects with CIs
-3. Pareto frontier analysis
+Enhanced L12 Orthogonal Array Analysis with Bootstrap Resampling
+==================================================================
 
-Usage: 
-  python analyze_homcsv_enhanced.py [--root <path>] [--solution <name>]
-  
-  --root: Root directory containing experimental data structure:
-          <root>/<Solution>/<Algorithm>/OAxx/repyy/reports/*.csv
-  --solution: Optional filter to analyze only specific solution
+WHAT THIS SCRIPT DOES:
+----------------------
+Analyzes mutation testing experiments using an L12 orthogonal array design to 
+evaluate the effects of 6 binary heuristic factors on:
+  1. SSHOM Success Rate (percentage of Strong-Semantic Higher-Order Mutants)
+  2. Runtime (milliseconds for HOM generation)
 
-Expected CSV structure matches Stryker HOMT output with columns:
-- sshom_rate_percent: SSHOM success rate
-- total_test_duration_ms: Runtime in milliseconds  
-- used_heuristics: String listing active heuristics
+Compares two algorithms (genetic vs local) and generates publication-ready plots
+showing main effects and interactions with non-parametric bootstrap confidence intervals.
 
-Outputs: 
-- Four CSV files with analysis data
-- Three PNG plots ready for thesis inclusion:
-  1. plot1_main_effects.png - Main effects with 95% CIs (two panels)  
-  2. plot2_interactions.png - Algorithm×Heuristic interactions (six multiples)
-  3. plot3_pareto_frontier.png - Pareto frontier trade-off analysis
-- Analysis summary report
+WHY WE USE THIS APPROACH:
+-------------------------
+1. **L12 Orthogonal Array Design**: Efficiently tests 6 factors (64 combinations) 
+   with only 12 experimental configurations, providing balanced coverage while 
+   minimizing experimental runs.
+
+2. **Bootstrap Resampling (B=2000)**: Provides robust confidence interval estimation 
+   without parametric assumptions, suitable for:
+   - Small sample sizes (n=30 per cell: 6 OA configs × 5 reps)
+   - Non-normal distributions (binomial proportions, skewed runtimes)
+   - Complex estimands (differences, ratios with corrected denominators)
+
+3. **Row-Level Bootstrap**: Preserves correlation structure within experimental runs,
+   where HOMs from the same run share configuration and execution environment.
+
+HOW IT WORKS:
+-------------
+1. **Data Loading**: Reads raw experimental CSV files (mutation-report-hom.csv)
+   - 12 OA configurations × 5 repetitions × 2 algorithms = 120 total runs
+   - Extracts: sshom_2/3/4 counts, total_homs_with_filtered, hom_generation_ms
+
+2. **Bootstrap Confidence Intervals**:
+   For SSHOM (binomial proportions):
+     - Resample 30 rows (6 OA configs × 5 reps) with replacement
+     - Recalculate proportion: p = (sshom_2+sshom_3+sshom_4) / total_homs
+     - Repeat 2000 times → percentile CI [Q₀.₀₂₅, Q₀.₉₇₅]
+   
+   For Runtime (continuous data):
+     - Resample raw millisecond values with replacement
+     - Calculate mean of resampled data
+     - Repeat 2000 times → percentile CI
+
+3. **Effect Calculation**:
+   - Point estimate: Effect = mean(ON) - mean(OFF) from RAW data
+   - CI for effect: Bootstrap differences Δ = ON_samples - OFF_samples
+   - Performed for all (algorithm, heuristic) combinations
+
+4. **Visualization**:
+   - Plot 1: Main effects bar charts (Panel A: SSHOM, Panel B: Runtime)
+   - Plot 2: Interaction line plots (6 heuristics × 2 algorithms)
+   - Error bars from bootstrap percentile CIs (currently disabled)
+
+HOW TO USE:
+-----------
+Basic usage:
+  python analyze_homcsv_enhanced.py --root <data_dir> --solution <name>
+
+Example:
+  python analyze_homcsv_enhanced.py \\
+    --root "C:/outputs" \\
+    --solution "MoreLinq" \\
+    --bootstrap 2000 \\
+    --seed 42
+
+Arguments:
+  --root PATH          Root directory with structure: <root>/<Solution>/<Algorithm>/OAxx/repyy/reports/*.csv
+  --solution NAME      Solution/repository name to analyze (e.g., "MoreLinq", "TimeProviderExtensions")
+  --bootstrap N        Number of bootstrap samples (default: 2000)
+  --seed N            Random seed for reproducibility (default: 42)
+
+Expected Directory Structure:
+  <root>/
+    <Solution>/
+      genetic/
+        OA01/
+          rep01/reports/mutation-report-hom.csv
+          rep02/reports/mutation-report-hom.csv
+          ...
+        OA02/
+          ...
+      local/
+        OA01/
+          ...
+
+Required CSV Columns (from mutation-report-hom.csv):
+  - sshom_2, sshom_3, sshom_4: SSHOM counts by distance
+  - total_homs_with_filtered: Total HOMs including filtered
+  - hom_generation_ms: Runtime in milliseconds
+  - used_heuristics: Comma-separated list of active heuristics
+
+Output Files (saved to C:/Users/<user>/analysis/<Solution>/latex_data/):
+  1. main_effects_bootstrap_latex.csv        - Main effects on SSHOM with bootstrap CIs
+  2. main_effects_runtime_bootstrap_latex.csv - Main effects on runtime with bootstrap CIs
+  3. interaction_effects_latex.csv           - Interaction effects with bootstrap CIs
+  4. plot1_main_effects.png                  - Main effects visualization (2 panels)
+  5. plot2_interactions.png                  - Interaction plots (6 small multiples)
+  6. analysis_summary.txt                    - Text report with data overview
+
+STATISTICAL DETAILS:
+--------------------
+- Bootstrap Method: Stratified row-level resampling with replacement
+- Sample Size: B=2000 bootstrap iterations per estimate
+- Confidence Level: 95% (percentile method: 2.5th and 97.5th percentiles)
+- Point Estimates: Calculated directly from raw data (not bootstrap mean)
+- Effect CIs: Bootstrap distribution of differences (ON - OFF)
+- Reproducibility: Fixed seed ensures identical results across runs
+
+For more details on the statistical methodology, see the thesis chapter on
+"Bootstrap Resampling for L12 Orthogonal Array Analysis".
+
+DEPENDENCIES:
+-------------
+Required: pandas, numpy, matplotlib, pathlib
+Optional: scipy (for faster bootstrap, falls back to manual implementation)
+
+Author: Merlijn van Uden
+Date: 2025-10-03
 """
 
 import pandas as pd
@@ -36,8 +131,6 @@ import logging
 import argparse
 import re
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-from matplotlib.patches import ConnectionPatch
 
 # Try to import scipy modules, fall back to manual implementation if not available
 try:
@@ -45,21 +138,6 @@ try:
     HAS_SCIPY_BOOTSTRAP = True
 except ImportError:
     HAS_SCIPY_BOOTSTRAP = False
-    
-try:
-    from scipy.spatial import ConvexHull
-    HAS_SCIPY_CONVEX = True
-except ImportError:
-    HAS_SCIPY_CONVEX = False
-
-# Try to import statsmodels for GLM-based EMM analysis
-try:
-    import statsmodels.api as sm
-    from statsmodels.genmod.generalized_linear_model import GLM
-    from statsmodels.genmod import families
-    HAS_STATSMODELS = True
-except ImportError:
-    HAS_STATSMODELS = False
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -67,6 +145,153 @@ logger = logging.getLogger(__name__)
 
 # Suppress warnings
 warnings.filterwarnings('ignore')
+
+
+# ==============================================================================
+# SHARED BOOTSTRAP FUNCTIONS FOR CONSISTENT ERROR BARS
+# ==============================================================================
+
+def bootstrap_prop_ci(df, heuristic_col, level_val, algorithm, B=2000, seed=42, 
+                      return_samples=False):
+    """
+    Hierarchical stratified bootstrap respecting L12 orthogonal array structure.
+    
+    For a given (algorithm, heuristic level) cell:
+    - Groups rows by OA row (expect 6 OA rows per level in L12 design)
+    - In each bootstrap replicate:
+      * Sample exactly 6 OA rows with replacement
+      * For each selected OA row, resample its 5 repeats with replacement
+      * Aggregate successes/trials and compute p_hat = total_successes / total_trials
+    - Returns percentile CI [2.5%, 97.5%] from bootstrap distribution
+    
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Data with columns: algorithm, heuristic_col, oa_row, rep (optional),
+        sshom_2/3/4, total_homs_with_filtered
+    heuristic_col : str
+        Name of the heuristic column to filter on
+    level_val : int
+        Level value (0 or 1) to filter for
+    algorithm : str
+        Algorithm name to filter for
+    B : int
+        Number of bootstrap samples (default 2000)
+    seed : int
+        Random seed for reproducibility (default 42)
+    return_samples : bool
+        If True, return bootstrap samples array (default False)
+    
+    Returns
+    -------
+    dict with keys:
+        - mean: Point estimate (S_all/N_all on original data)
+        - lo: 2.5th percentile of bootstrap distribution
+        - hi: 97.5th percentile of bootstrap distribution
+        - samples: Bootstrap sample array (if return_samples=True)
+        - n_trials: Total trials (denominator) in original data
+    """
+    # Filter to the specific cell
+    mask = (df['algorithm'] == algorithm) & (df[heuristic_col] == level_val)
+    cell_data = df[mask].copy()
+    
+    if len(cell_data) == 0:
+        logger.warning(f"No data for {algorithm}/{heuristic_col}={level_val}")
+        return {'mean': np.nan, 'lo': np.nan, 'hi': np.nan, 'n_trials': 0}
+    
+    # Check for rep column
+    have_rep = 'rep' in cell_data.columns
+    
+    # Use corrected denominator column
+    denom_col = 'total_homs_with_filtered' if 'total_homs_with_filtered' in cell_data.columns else 'total_homs'
+    
+    # Get available SSHOM columns
+    sshom_cols = [c for c in ['sshom_2', 'sshom_3', 'sshom_4'] if c in cell_data.columns]
+    
+    if not sshom_cols:
+        logger.warning(f"No SSHOM columns for {algorithm}/{heuristic_col}={level_val}")
+        return {'mean': np.nan, 'lo': np.nan, 'hi': np.nan, 'n_trials': 0}
+    
+    # Calculate point estimate on original data
+    S_all = cell_data[sshom_cols].fillna(0).to_numpy().sum()
+    N_all = cell_data[denom_col].fillna(0).to_numpy().sum()
+    
+    if N_all == 0:
+        logger.warning(f"Zero trials for {algorithm}/{heuristic_col}={level_val}")
+        return {'mean': np.nan, 'lo': np.nan, 'hi': np.nan, 'n_trials': 0}
+    
+    mean_prop = S_all / N_all
+    
+    # Group by OA row - expect 6 rows per level in L12 design
+    if 'oa_row' not in cell_data.columns:
+        logger.error(f"Missing 'oa_row' column for hierarchical bootstrap")
+        # Fallback to simple row-level bootstrap
+        rng = np.random.default_rng(seed)
+        n_rows = len(cell_data)
+        bootstrap_props = []
+        
+        for _ in range(B):
+            boot_indices = rng.integers(0, n_rows, size=n_rows)
+            boot_sample = cell_data.iloc[boot_indices]
+            S_boot = boot_sample[sshom_cols].fillna(0).to_numpy().sum()
+            N_boot = boot_sample[denom_col].fillna(0).to_numpy().sum()
+            p_boot = 0.0 if N_boot == 0 else S_boot / N_boot
+            bootstrap_props.append(np.clip(p_boot, 0.0, 1.0))
+        
+        bootstrap_props = np.array(bootstrap_props)
+    else:
+        # Hierarchical bootstrap respecting L12 structure
+        groups = cell_data.groupby('oa_row', dropna=False)
+        oa_keys = list(groups.groups.keys())
+        n_oa_rows = len(oa_keys)
+        
+        # Warn if not exactly 6 OA rows (L12 design requirement)
+        if n_oa_rows != 6:
+            logger.warning(f"Expected 6 OA rows for {algorithm}/{heuristic_col}={level_val}, found {n_oa_rows}")
+        
+        take_rows = min(6, n_oa_rows)
+        rng = np.random.default_rng(seed)
+        B = int(B)
+        bootstrap_props = np.empty(B, dtype=float)
+        
+        for b in range(B):
+            # Sample OA rows with replacement
+            chosen_oa_rows = rng.choice(oa_keys, size=take_rows, replace=True)
+            S_b = 0.0
+            N_b = 0.0
+            
+            for oa_row in chosen_oa_rows:
+                g = groups.get_group(oa_row)
+                
+                # Resample repeats within this OA row with replacement
+                if have_rep and len(g) > 1:
+                    idx = rng.integers(0, len(g), size=len(g))
+                    g = g.iloc[idx]
+                
+                # Aggregate successes and trials
+                S_b += g[sshom_cols].fillna(0).to_numpy().sum()
+                N_b += g[denom_col].fillna(0).to_numpy().sum()
+            
+            bootstrap_props[b] = 0.0 if N_b == 0 else S_b / N_b
+    
+    # Calculate percentile CI
+    lo, hi = np.percentile(bootstrap_props, [2.5, 97.5])
+    
+    # Clip mean to [0, 1]
+    mean_prop = np.clip(mean_prop, 0.0, 1.0)
+    
+    result = {
+        'mean': float(mean_prop),
+        'lo': float(lo),
+        'hi': float(hi),
+        'n_trials': int(N_all)
+    }
+    
+    if return_samples:
+        result['samples'] = bootstrap_props
+    
+    return result
+
 
 # Configure matplotlib for high-quality plots
 plt.style.use('default')
@@ -80,13 +305,13 @@ plt.rcParams['xtick.labelsize'] = 9
 plt.rcParams['ytick.labelsize'] = 9
 
 class L12AnalysisEnhanced:
-    def __init__(self, base_path=None):
+    def __init__(self, base_path=None, solution=None, bootstrap_n=2000, bootstrap_seed=42):
         """Initialize the analysis with path configuration."""
-        if base_path is None:
-            self.base_path = Path.cwd()
-        else:
-            self.base_path = Path(base_path)
-            
+        self.base_path = Path(base_path)
+        self.solution = solution
+        self.bootstrap_n = bootstrap_n
+        self.bootstrap_seed = bootstrap_seed
+
         # L12 orthogonal array configuration - MUST MATCH run-homt-oa.ps1
         # PowerShell HMap order: H1=CodeLocation, H2=EmptyAssessingTests, H3=MutatorType,
         #                        H4=OverlappingTests, H5=MaxSizeLimit, H6=SyntaxNodeConflict
@@ -173,29 +398,30 @@ class L12AnalysisEnhanced:
         """
         return "Significance: *** p<0.001, ** p<0.01, * p<0.05, † p<0.10, ns ≥0.10"
         
-    def find_run_csvs(self, root_path):
+    def find_run_csvs(self, root_path, solution):
         """Find all CSV files in the expected directory structure."""
-        # Look for CSV files in the nested structure: <Solution>/<Algorithm>/OAxx/repyy/reports/*.csv
+        # Look for CSV files in the nested structure: <Repo>/<Solution>/<Algorithm>/OAxx/repyy/reports/*.csv
         csv_files = []
         
         # Search patterns for CSV files - ONLY match mutation-report-hom.csv to avoid pulling in
         # GLM outputs, analysis results, and other CSV artifacts
-        patterns = [
-            "**/reports/mutation-report-hom.csv",  # Specific filename in reports directory
-            "**/mutation-report-hom.csv",  # Specific filename (fallback if not in reports/)
-        ]
+
+        pattern = "**/reports/mutation-report-hom.csv"  # Specific filename in reports directory
         
-        for pattern in patterns:
-            found_files = list(root_path.rglob(pattern))
-            csv_files.extend([f for f in found_files if f.is_file() and f not in csv_files])
-        
+        # add solution to end of root_path
+        if solution:
+            root_path = root_path / solution
+
+        found_files = list(root_path.rglob(pattern))
+        csv_files.extend([f for f in found_files if f.is_file() and f not in csv_files])
+
         return csv_files
     
     def parse_path_metadata(self, csv_path):
         """Extract metadata from the file path structure."""
         import re
         
-        # Expected structure: .../Solution/Algorithm/OAxx/repyy/reports/mutation-report-hom.csv
+        # Expected structure: C:\Users\MerlijnU\outputs\MoreLinq\MoreLinq\genetic\OA01\rep01\reports\mutation-report-hom.csv
         parts = list(csv_path.resolve().parents)
         
         metadata = {
@@ -242,7 +468,7 @@ class L12AnalysisEnhanced:
         logger.info("Loading experimental data...")
         
         # Find CSV files in the nested directory structure
-        csv_files = self.find_run_csvs(self.base_path)
+        csv_files = self.find_run_csvs(self.base_path, self.solution)
         
         if not csv_files:
             logger.warning(f"No CSV files found in {self.base_path}")
@@ -254,9 +480,14 @@ class L12AnalysisEnhanced:
         
         for csv_file in csv_files:
             try:
+                
                 # Parse metadata from file path
                 metadata = self.parse_path_metadata(csv_file)
-                
+
+                # Log metadata extraction issues
+                if not metadata["solution"] or not metadata["algorithm"] or not metadata["oa_row"] or not metadata["rep"]:
+                    logger.warning(f"Could not fully parse metadata from path: {csv_file}. Parsed: {metadata}")
+
                 # Read the CSV file
                 df = pd.read_csv(csv_file, engine="python")
                 
@@ -271,56 +502,26 @@ class L12AnalysisEnhanced:
                 df['oa_row'] = metadata["oa_row"]
                 df['rep'] = metadata["rep"]
                 df['run_id'] = metadata["run_id"]
+                                
+                available_sshom_cols = ['sshom_2', 'sshom_3', 'sshom_4']
+                                
+                hom_total_col = 'total_homs'
                 
-                # Ensure consistent SSHOM percentage calculation: (sshom_2 + sshom_3 + sshom_4) / total_homs_with_filtered * 100
-                # This includes filtered HOMs in the denominator for accurate success rate calculation
-                # Matches the updated analyze_homcsv.py and glm_binomial_anova.py calculation
-                # Try multiple naming conventions for SSHOM columns
-                sshom_col_candidates = [
-                    ['sshom_2', 'sshom_3', 'sshom_4'],  # Most common format
-                    ['sshoms_2nd', 'sshoms_3rd', 'sshoms_4th'],  # Alternative format
-                ]
-                
-                available_sshom_cols = []
-                for candidate_set in sshom_col_candidates:
-                    found_cols = [col for col in candidate_set if col in df.columns]
-                    if found_cols:
-                        available_sshom_cols = found_cols
-                        logger.debug(f"Found SSHOM columns: {found_cols}")
-                        break
-                
-                # Calculate total HOMs including filtered ones
-                # Try multiple possible column names for total HOMs
-                hom_total_candidates = ['total_homs', 'hom_total', 'total_hom', 'homs_total']
-                hom_total_col = None
-                
-                for candidate in hom_total_candidates:
-                    if candidate in df.columns:
-                        hom_total_col = candidate
-                        logger.debug(f"Found HOM total column: {candidate}")
-                        break
-                
-                if hom_total_col is not None:
-                    original_hom_total = df[hom_total_col].fillna(0)
+                original_hom_total = df[hom_total_col].fillna(0)
                     
-                    # Add filtered HOMs to get true total
-                    # Include ALL filtered HOM categories to get accurate denominator
-                    filtered_cols = ['filtered_empty_total', 'filtered_invalid_total']
-                    total_homs_with_filtered = original_hom_total.copy()
+
+                filtered_cols = ['filtered_empty_total', 'filtered_invalid_total']
+                total_homs_with_filtered = original_hom_total.copy()
                     
-                    for col in filtered_cols:
-                        if col in df.columns:
-                            total_homs_with_filtered += df[col].fillna(0)
-                            logger.debug(f"Added {col} to total_homs_with_filtered")
-                    
-                    df['total_homs_with_filtered'] = total_homs_with_filtered
-                    df['total_homs_kept_only'] = original_hom_total
-                    
-                    logger.debug(f"Calculated total_homs_with_filtered (includes filtered HOMs): {total_homs_with_filtered.iloc[0] if len(total_homs_with_filtered) > 0 else 0}")
-                else:
-                    logger.warning(f"No HOM total column found in {csv_file}. Available columns: {list(df.columns)}")
-                    df['total_homs_with_filtered'] = 0
-                    df['total_homs_kept_only'] = 0
+                for col in filtered_cols:
+                    if col in df.columns:
+                        total_homs_with_filtered += df[col].fillna(0)
+                        logger.debug(f"Added {col} to total_homs_with_filtered")
+                
+                df['total_homs_with_filtered'] = total_homs_with_filtered
+                df['total_homs_kept_only'] = original_hom_total
+                
+                logger.debug(f"Calculated total_homs_with_filtered (includes filtered HOMs): {total_homs_with_filtered.iloc[0] if len(total_homs_with_filtered) > 0 else 0}")
                 
                 # ALWAYS recalculate sshom_rate_percent if we have the necessary data
                 # The CSV files contain the OLD calculation (without filtered HOMs), so we must override it
@@ -333,17 +534,25 @@ class L12AnalysisEnhanced:
                         df['sshom_rate_percent_original'] = df['sshom_rate_percent'].copy()
                     
                     # Recalculate sshom_rate_percent using total_homs_with_filtered (includes filtered HOMs)
-                    # This is the CORRECTED rate that will be used for all plots and analysis
-                    # This OVERWRITES the incorrect value from the CSV file
-                    df['sshom_rate_percent'] = 100.0 * df['total_sshoms'] / df['total_homs_with_filtered'].replace(0, 1)  # Avoid division by zero
+                    # Set to NaN when denominator is zero (do NOT replace 0 with 1)
+                    denom = df['total_homs_with_filtered']
+                    df['sshom_rate_percent'] = np.where(denom > 0, 100.0 * df['total_sshoms'] / denom, np.nan)
                     
                     # Also calculate the old rate for comparison (without filtered HOMs)
                     if 'total_homs_kept_only' in df.columns:
-                        df['sshom_rate_without_filtered_percent'] = 100.0 * df['total_sshoms'] / df['total_homs_kept_only'].replace(0, 1)
+                        denom_old = df['total_homs_kept_only']
+                        df['sshom_rate_without_filtered_percent'] = np.where(denom_old > 0, 100.0 * df['total_sshoms'] / denom_old, np.nan)
                     
-                    logger.info(f"CORRECTED sshom_rate_percent calculated: {df['sshom_rate_percent'].iloc[0]:.2f}% (includes {df['total_homs_with_filtered'].iloc[0]:.0f} total HOMs with filtered)")
-                    if 'sshom_rate_percent_original' in df.columns:
-                        logger.info(f"  Original CSV value was: {df['sshom_rate_percent_original'].iloc[0]:.2f}% (excluded filtered HOMs)")
+                    # Count rows with valid SSHOM rates
+                    valid_rows = df['sshom_rate_percent'].notna().sum()
+                    total_rows = len(df)
+                    if valid_rows < total_rows:
+                        logger.warning(f"  {total_rows - valid_rows}/{total_rows} rows have zero denominator (set to NaN)")
+                    
+                    if valid_rows > 0:
+                        logger.debug(f"CORRECTED sshom_rate_percent calculated: {df['sshom_rate_percent'].dropna().iloc[0]:.2f}% (includes filtered HOMs)")
+                        if 'sshom_rate_percent_original' in df.columns:
+                            logger.debug(f"  Original CSV value was: {df['sshom_rate_percent_original'].dropna().iloc[0]:.2f}% (excluded filtered HOMs)")
                     logger.debug(f"Recalculated sshom_rate_percent using {available_sshom_cols} columns with filtered HOMs included")
                 else:
                     # Provide detailed diagnostics about what's missing
@@ -470,25 +679,40 @@ class L12AnalysisEnhanced:
             for heuristic in self.heuristics:
                 if heuristic not in merged_data.columns:
                     merged_data[heuristic] = 0  # Default to OFF
+        
+        # Drop rows with NaN in sshom_rate_percent (zero denominator cases)
+        if 'sshom_rate_percent' in merged_data.columns:
+            n_before = len(merged_data)
+            merged_data = merged_data.dropna(subset=['sshom_rate_percent'])
+            n_after = len(merged_data)
+            if n_after < n_before:
+                logger.warning(f"Dropped {n_before - n_after} rows with NaN SSHOM rate (zero denominator)")
                     
         return merged_data
     
     def bootstrap_confidence_interval(self, data, confidence_level=0.95):
-        """Calculate bootstrap confidence interval for a data series."""
+        """
+        Calculate bootstrap confidence interval for continuous data (e.g., runtime).
+        Uses the SAME B and seed parameters as bootstrap_prop_ci for consistency.
+        """
         if len(data) < 2:
             mean_val = data.iloc[0] if len(data) == 1 else 0
             return mean_val, mean_val, mean_val
             
         mean_val = np.mean(data)
         
+        # Use consistent bootstrap parameters from instance
+        B = self.bootstrap_n
+        seed = self.bootstrap_seed
+        
         if HAS_SCIPY_BOOTSTRAP:
             try:
                 def mean_statistic(x):
                     return np.mean(x)
                 
-                # Perform scipy bootstrap resampling
-                result = bootstrap((data,), mean_statistic, n_resamples=1000, 
-                                 confidence_level=confidence_level, random_state=42)
+                # Perform scipy bootstrap resampling with instance parameters
+                result = bootstrap((data,), mean_statistic, n_resamples=B, 
+                                 confidence_level=confidence_level, random_state=seed)
                 
                 ci_low = result.confidence_interval.low
                 ci_high = result.confidence_interval.high
@@ -498,14 +722,13 @@ class L12AnalysisEnhanced:
             except Exception as e:
                 logger.warning(f"Scipy bootstrap failed: {e}, using manual bootstrap")
         
-        # Manual bootstrap implementation
+        # Manual bootstrap implementation with consistent parameters
         try:
-            n_bootstrap = 1000
             bootstrap_means = []
-            np.random.seed(42)
+            rng = np.random.default_rng(seed)
             
-            for _ in range(n_bootstrap):
-                bootstrap_sample = np.random.choice(data, size=len(data), replace=True)
+            for _ in range(B):
+                bootstrap_sample = rng.choice(data, size=len(data), replace=True)
                 bootstrap_means.append(np.mean(bootstrap_sample))
             
             bootstrap_means = np.array(bootstrap_means)
@@ -522,328 +745,173 @@ class L12AnalysisEnhanced:
             ci_high = mean_val + 1.96 * std_err
             return mean_val, ci_low, ci_high
     
-    def calculate_emm_effects(self, data, response_column, confidence_level=0.95):
-        """Calculate GLM-based EMM main effects with proper confidence intervals.
-        
-        Uses Binomial GLM (logit link) to model SSHOM success counts:
-        - Endog = successes (sshom_2 + sshom_3 + sshom_4)
-        - Trials = total_homs_with_filtered
-        - Computes EMMs by averaging predictions over the balanced L12 design
-        - Gets 95% CIs via delta method; falls back to bootstrap if separation occurs
+    def calculate_bootstrap_main_effects(self, data, response_column, confidence_level=0.95):
         """
-        logger.info(f"Calculating GLM-based EMM effects for {response_column}")
+        Calculate main effects using hierarchical bootstrap respecting L12 design.
         
-        emm_effects = []
+        This method ALWAYS uses bootstrap percentile CIs - no GLM, no fallbacks.
+        For each (algorithm, heuristic) combination:
+        - Computes bootstrap CI for level=0 and level=1
+        - Effect = mean(level=1) - mean(level=0)
+        - Effect CI from bootstrap samples of differences (Δ = ON_samples - OFF_samples)
         
-        # Check if we have statsmodels
-        if not HAS_STATSMODELS:
-            logger.warning("Statsmodels not available, falling back to bootstrap method")
-            return self.generate_main_effects_data(data, response_column)
+        Returns DataFrame with columns (SSHOM):
+        - algorithm, factor, effect_pp, level_off, level_on, ci_low_pp, ci_high_pp, 
+          se_diff_pp, trials_off, trials_on, B, seed, method
         
-        # Import itertools for combinatorial logic
-        try:
-            from itertools import product
-        except ImportError:
-            logger.warning("itertools not available, falling back to bootstrap method")
-            return self.generate_main_effects_data(data, response_column)
+        Returns DataFrame with columns (Runtime):
+        - algorithm, factor, effect, level_off, level_on, ci_low, ci_high, 
+          se_diff, n_off, n_on, B, seed, method
+        """
+        logger.info(f"========================================")
+        logger.info(f"Calculating bootstrap-based main effects for {response_column}")
+        logger.info(f"Bootstrap: B={self.bootstrap_n}, seed={self.bootstrap_seed}")
+        logger.info(f"Total data rows: {len(data)}")
+        logger.info(f"Algorithms in data: {data['algorithm'].unique() if 'algorithm' in data.columns else 'NO ALGORITHM COLUMN'}")
+        logger.info(f"========================================")
         
-        try:
-            for algorithm in self.algorithms:
-                alg_data = data[data['algorithm'] == algorithm].copy()
-                
-                if len(alg_data) < 6:  # Need sufficient data for model fitting
-                    logger.warning(f"Insufficient data for {algorithm} GLM EMM analysis")
+        bootstrap_effects = []
+        
+        for algorithm in self.algorithms:
+            logger.info(f"\nProcessing {algorithm}...")
+            alg_data = data[data['algorithm'] == algorithm].copy()
+            
+            if len(alg_data) < 6:
+                logger.warning(f"Insufficient data for {algorithm}: {len(alg_data)} rows")
+                continue
+            
+            for heuristic in self.heuristics:
+                if heuristic not in alg_data.columns:
+                    logger.warning(f"Heuristic {heuristic} not in data for {algorithm}")
                     continue
                 
-                # Prepare data for GLM modeling - ensure all heuristic columns exist
-                model_data = alg_data.copy()
-                missing_heuristics = []
-                for heuristic in self.heuristics:
-                    if heuristic not in model_data.columns:
-                        missing_heuristics.append(heuristic)
+                # Determine if this is SSHOM (binomial) or runtime (continuous) data
+                is_sshom_data = 'sshom' in response_column.lower()
                 
-                if missing_heuristics:
-                    logger.warning(f"Heuristics missing for {algorithm}: {missing_heuristics}")
-                    continue
+                # Use different seeds for OFF vs ON to get independent bootstrap samples
+                import hashlib
+                base_string = f"{algorithm}_{heuristic}_{self.bootstrap_seed}"
+                hash_val = int(hashlib.md5(base_string.encode()).hexdigest()[:8], 16)
                 
-                # For GLM, we need success counts and total trials
-                # Check if we're dealing with SSHOM rate (need to back-calculate counts)
-                if 'sshom' in response_column.lower() or 'success' in response_column.lower():
-                    # Try to find success count columns
-                    sshom_cols = ['sshom_2', 'sshom_3', 'sshom_4']
-                    available_sshom = [col for col in sshom_cols if col in model_data.columns]
-                    
-                    if not available_sshom:
-                        logger.warning(f"No SSHOM count columns found for {algorithm}, using bootstrap")
-                        alg_bootstrap = self.generate_main_effects_data(alg_data, response_column)
-                        # Convert to EMM format
-                        for heuristic in self.heuristics:
-                            bootstrap_data = alg_bootstrap[alg_bootstrap['factor'] == heuristic]
-                            if len(bootstrap_data) >= 2:
-                                low_data = bootstrap_data[bootstrap_data['level'] == 0]
-                                high_data = bootstrap_data[bootstrap_data['level'] == 1]
-                                if len(low_data) > 0 and len(high_data) > 0:
-                                    effect = high_data['mean'].iloc[0] - low_data['mean'].iloc[0]
-                                    ci_low = effect - 2 * np.sqrt(
-                                        (high_data['mean'].iloc[0] - high_data['ci_low'].iloc[0])**2 +
-                                        (low_data['ci_high'].iloc[0] - low_data['mean'].iloc[0])**2
-                                    )
-                                    ci_high = effect + 2 * np.sqrt(
-                                        (high_data['ci_high'].iloc[0] - high_data['mean'].iloc[0])**2 +
-                                        (low_data['mean'].iloc[0] - low_data['ci_low'].iloc[0])**2
-                                    )
-                                    emm_effects.append({
-                                        'algorithm': algorithm,
-                                        'factor': heuristic,
-                                        'effect': effect,
-                                        'emm_low': low_data['mean'].iloc[0],
-                                        'emm_high': high_data['mean'].iloc[0],
-                                        'ci_low': ci_low,
-                                        'ci_high': ci_high,
-                                        'se_diff': (ci_high - ci_low) / 3.92,
-                                        'method': 'Bootstrap_no_counts'
-                                    })
-                        continue
-                    
-                    # Calculate success counts
-                    model_data['_successes'] = model_data[available_sshom].fillna(0).sum(axis=1)
-                    
-                    # Get total trials (including filtered HOMs)
-                    if 'total_homs_with_filtered' in model_data.columns:
-                        model_data['_trials'] = model_data['total_homs_with_filtered'].fillna(1).astype(int)
-                    else:
-                        logger.warning(f"No total_homs_with_filtered for {algorithm}, using bootstrap")
-                        continue
-                    
-                    # Filter out rows with zero trials
-                    model_data = model_data[model_data['_trials'] > 0].copy()
-                    
-                    if len(model_data) < 6:
-                        logger.warning(f"Insufficient valid data after filtering for {algorithm}")
-                        continue
-                    
-                    endog = model_data['_successes'].values
-                    trials = model_data['_trials'].values
-                    use_glm = True
+                if is_sshom_data:
+                    # For SSHOM: Use bootstrap_prop_ci on raw binomial counts
+                    off_boot = bootstrap_prop_ci(
+                        alg_data, heuristic, 0, algorithm,
+                        B=self.bootstrap_n, seed=self.bootstrap_seed + hash_val, return_samples=True
+                    )
+                    on_boot = bootstrap_prop_ci(
+                        alg_data, heuristic, 1, algorithm,
+                        B=self.bootstrap_n, seed=self.bootstrap_seed + hash_val + 1, return_samples=True
+                    )
                 else:
-                    # For runtime or other continuous responses, use OLS-style approach
-                    # but convert to probability scale for consistency
-                    use_glm = False
+                    # For Runtime: Use traditional bootstrap on continuous values
+                    off_data = alg_data[alg_data[heuristic] == 0][response_column].dropna()
+                    on_data = alg_data[alg_data[heuristic] == 1][response_column].dropna()
+                    
+                    if len(off_data) == 0 or len(on_data) == 0:
+                        logger.warning(f"No runtime data for {algorithm}-{heuristic}")
+                        continue
+                    
+                    # Bootstrap the means with independent seeds
+                    rng_off = np.random.RandomState(self.bootstrap_seed + hash_val)
+                    rng_on = np.random.RandomState(self.bootstrap_seed + hash_val + 1)
+                    off_samples = []
+                    on_samples = []
+                    
+                    for _ in range(self.bootstrap_n):
+                        off_boot_sample = rng_off.choice(off_data, size=len(off_data), replace=True)
+                        on_boot_sample = rng_on.choice(on_data, size=len(on_data), replace=True)
+                        off_samples.append(np.mean(off_boot_sample))
+                        on_samples.append(np.mean(on_boot_sample))
+                    
+                    off_samples = np.array(off_samples)
+                    on_samples = np.array(on_samples)
+                    
+                    # Create dict format matching bootstrap_prop_ci output
+                    off_boot = {
+                        'mean': np.mean(off_data),
+                        'lo': np.percentile(off_samples, 2.5),
+                        'hi': np.percentile(off_samples, 97.5),
+                        'samples': off_samples
+                    }
+                    on_boot = {
+                        'mean': np.mean(on_data),
+                        'lo': np.percentile(on_samples, 2.5),
+                        'hi': np.percentile(on_samples, 97.5),
+                        'samples': on_samples
+                    }
                 
-                try:
-                    if use_glm:
-                        # Build design matrix for GLM
-                        exog_list = []
-                        for heuristic in self.heuristics:
-                            if heuristic in model_data.columns:
-                                exog_list.append(model_data[heuristic].values)
-                        
-                        exog = np.column_stack([np.ones(len(model_data))] + exog_list)
-                        
-                        # Fit Binomial GLM with logit link
-                        try:
-                            glm_model = GLM(endog, exog, family=families.Binomial(), freq_weights=trials)
-                            glm_result = glm_model.fit()
-                            
-                            # Check for convergence warnings
-                            if not glm_result.converged:
-                                logger.warning(f"GLM did not converge for {algorithm}, trying with scale='X2'")
-                                glm_result = glm_model.fit(scale='X2')
-                        except Exception as e:
-                            logger.warning(f"GLM fitting failed for {algorithm}: {e}, using bootstrap")
-                            # Fall back to bootstrap
-                            alg_bootstrap = self.generate_main_effects_data(alg_data, response_column)
-                            for heuristic in self.heuristics:
-                                bootstrap_data = alg_bootstrap[alg_bootstrap['factor'] == heuristic]
-                                if len(bootstrap_data) >= 2:
-                                    low_data = bootstrap_data[bootstrap_data['level'] == 0]
-                                    high_data = bootstrap_data[bootstrap_data['level'] == 1]
-                                    if len(low_data) > 0 and len(high_data) > 0:
-                                        effect = high_data['mean'].iloc[0] - low_data['mean'].iloc[0]
-                                        ci_low = effect - 2 * np.sqrt(
-                                            (high_data['mean'].iloc[0] - high_data['ci_low'].iloc[0])**2 +
-                                            (low_data['ci_high'].iloc[0] - low_data['mean'].iloc[0])**2
-                                        )
-                                        ci_high = effect + 2 * np.sqrt(
-                                            (high_data['ci_high'].iloc[0] - high_data['mean'].iloc[0])**2 +
-                                            (low_data['mean'].iloc[0] - low_data['ci_low'].iloc[0])**2
-                                        )
-                                        emm_effects.append({
-                                            'algorithm': algorithm,
-                                            'factor': heuristic,
-                                            'effect': effect,
-                                            'emm_low': low_data['mean'].iloc[0],
-                                            'emm_high': high_data['mean'].iloc[0],
-                                            'ci_low': ci_low,
-                                            'ci_high': ci_high,
-                                            'se_diff': (ci_high - ci_low) / 3.92,
-                                            'method': 'Bootstrap_glm_fail'
-                                        })
-                            continue
-                        
-                        # Calculate EMMs for each heuristic
-                        for h_idx, heuristic in enumerate(self.heuristics):
-                            if heuristic not in model_data.columns:
-                                continue
-                            
-                            # Get all unique combinations of OTHER heuristics in the L12 design
-                            other_heuristics = [h for h in self.heuristics if h != heuristic and h in model_data.columns]
-                            
-                            # Create all combinations (2^n combinations for n other heuristics)
-                            other_combinations = list(product([0, 1], repeat=len(other_heuristics)))
-                            
-                            # Collect predictions for LOW and HIGH levels of target heuristic
-                            emm_low_probs = []
-                            emm_high_probs = []
-                            emm_low_ses = []
-                            emm_high_ses = []
-                            
-                            for combo in other_combinations:
-                                # Build prediction design matrix
-                                pred_row_low = [1]  # Intercept
-                                pred_row_high = [1]
-                                
-                                for i, h in enumerate(self.heuristics):
-                                    if h == heuristic:
-                                        pred_row_low.append(0)
-                                        pred_row_high.append(1)
-                                    elif h in other_heuristics:
-                                        idx_in_combo = other_heuristics.index(h)
-                                        pred_row_low.append(combo[idx_in_combo])
-                                        pred_row_high.append(combo[idx_in_combo])
-                                
-                                pred_exog_low = np.array([pred_row_low])
-                                pred_exog_high = np.array([pred_row_high])
-                                
-                                try:
-                                    # Get predictions on probability scale
-                                    pred_low = glm_result.get_prediction(pred_exog_low)
-                                    pred_high = glm_result.get_prediction(pred_exog_high)
-                                    
-                                    # Convert to percentage scale
-                                    emm_low_probs.append(pred_low.predicted_mean[0] * 100)
-                                    emm_high_probs.append(pred_high.predicted_mean[0] * 100)
-                                    emm_low_ses.append(pred_low.se_mean[0] * 100)
-                                    emm_high_ses.append(pred_high.se_mean[0] * 100)
-                                    
-                                except Exception as e:
-                                    logger.debug(f"Prediction failed for combination {combo}: {e}")
-                                    continue
-                            
-                            # Calculate marginal means by averaging across all combinations
-                            if emm_low_probs and emm_high_probs:
-                                emm_low = np.mean(emm_low_probs)
-                                emm_high = np.mean(emm_high_probs)
-                                
-                                # Calculate the effect (difference in percentage points)
-                                effect = emm_high - emm_low
-                                
-                                # Calculate SE for the marginal means
-                                # SE of mean of predictions = sqrt(sum(SE_i^2)) / n
-                                se_emm_low = np.sqrt(np.sum(np.array(emm_low_ses)**2)) / len(emm_low_ses)
-                                se_emm_high = np.sqrt(np.sum(np.array(emm_high_ses)**2)) / len(emm_high_ses)
-                                
-                                # SE for difference (assuming independence)
-                                se_diff = np.sqrt(se_emm_low**2 + se_emm_high**2)
-                                
-                                # Calculate 95% CI for the difference (use z-score for large samples)
-                                z_critical = 1.96
-                                effect_ci_low = effect - z_critical * se_diff
-                                effect_ci_high = effect + z_critical * se_diff
-                                
-                                emm_effects.append({
-                                    'algorithm': algorithm,
-                                    'factor': heuristic,
-                                    'effect': effect,
-                                    'emm_low': emm_low,
-                                    'emm_high': emm_high,
-                                    'ci_low': effect_ci_low,
-                                    'ci_high': effect_ci_high,
-                                    'se_diff': se_diff,
-                                    'method': 'GLM',
-                                    'n_combinations': len(emm_low_probs)
-                                })
-                            else:
-                                logger.warning(f"No valid predictions for {algorithm}-{heuristic}")
-                                continue
-                    else:
-                        # For non-GLM responses (e.g., runtime), fall back to bootstrap
-                        logger.info(f"Using bootstrap for {response_column} (non-GLM)")
-                        alg_bootstrap = self.generate_main_effects_data(alg_data, response_column)
-                        for heuristic in self.heuristics:
-                            bootstrap_data = alg_bootstrap[alg_bootstrap['factor'] == heuristic]
-                            if len(bootstrap_data) >= 2:
-                                low_data = bootstrap_data[bootstrap_data['level'] == 0]
-                                high_data = bootstrap_data[bootstrap_data['level'] == 1]
-                                if len(low_data) > 0 and len(high_data) > 0:
-                                    effect = high_data['mean'].iloc[0] - low_data['mean'].iloc[0]
-                                    ci_low = effect - 2 * np.sqrt(
-                                        (high_data['mean'].iloc[0] - high_data['ci_low'].iloc[0])**2 +
-                                        (low_data['ci_high'].iloc[0] - low_data['mean'].iloc[0])**2
-                                    )
-                                    ci_high = effect + 2 * np.sqrt(
-                                        (high_data['ci_high'].iloc[0] - high_data['mean'].iloc[0])**2 +
-                                        (low_data['mean'].iloc[0] - low_data['ci_low'].iloc[0])**2
-                                    )
-                                    emm_effects.append({
-                                        'algorithm': algorithm,
-                                        'factor': heuristic,
-                                        'effect': effect,
-                                        'emm_low': low_data['mean'].iloc[0],
-                                        'emm_high': high_data['mean'].iloc[0],
-                                        'ci_low': ci_low,
-                                        'ci_high': ci_high,
-                                        'se_diff': (ci_high - ci_low) / 3.92,
-                                        'method': 'Bootstrap_runtime'
-                                    })
-                        
-                except Exception as e:
-                    logger.warning(f"Model fitting failed for {algorithm}: {e}")
-                    # Fall back to bootstrap method for this algorithm
-                    alg_bootstrap = self.generate_main_effects_data(alg_data, response_column)
-                    
-                    # Convert bootstrap results to EMM format
-                    for heuristic in self.heuristics:
-                        bootstrap_data = alg_bootstrap[alg_bootstrap['factor'] == heuristic]
-                        
-                        if len(bootstrap_data) >= 2:
-                            low_data = bootstrap_data[bootstrap_data['level'] == 0]
-                            high_data = bootstrap_data[bootstrap_data['level'] == 1]
-                            
-                            if len(low_data) > 0 and len(high_data) > 0:
-                                effect = high_data['mean'].iloc[0] - low_data['mean'].iloc[0]
-                                
-                                # Use bootstrap CIs (conservative)
-                                ci_low = effect - 2 * np.sqrt(
-                                    (high_data['mean'].iloc[0] - high_data['ci_low'].iloc[0])**2 +
-                                    (low_data['ci_high'].iloc[0] - low_data['mean'].iloc[0])**2
-                                )
-                                ci_high = effect + 2 * np.sqrt(
-                                    (high_data['ci_high'].iloc[0] - high_data['mean'].iloc[0])**2 +
-                                    (low_data['mean'].iloc[0] - low_data['ci_low'].iloc[0])**2
-                                )
-                                
-                                emm_effects.append({
-                                    'algorithm': algorithm,
-                                    'factor': heuristic,
-                                    'effect': effect,
-                                    'emm_low': low_data['mean'].iloc[0],
-                                    'emm_high': high_data['mean'].iloc[0],
-                                    'ci_low': ci_low,
-                                    'ci_high': ci_high,
-                                    'se_diff': (ci_high - ci_low) / 3.92,
-                                    'method': 'Bootstrap_fallback'
-                                })
-                    
-        except Exception as e:
-            logger.error(f"EMM calculation failed: {e}")
-            # Fall back to original bootstrap method
-            return self.generate_main_effects_data(data, response_column)
+                if np.isnan(off_boot['mean']) or np.isnan(on_boot['mean']):
+                    logger.warning(f"No data for {algorithm}-{heuristic}")
+                    continue
+                
+                # Calculate effect and its CI from bootstrap samples
+                effect = on_boot['mean'] - off_boot['mean']
+                
+                if 'samples' in off_boot and 'samples' in on_boot:
+                    # Bootstrap the difference
+                    diff_samples = on_boot['samples'] - off_boot['samples']
+                    effect_ci_low = np.percentile(diff_samples, 2.5)
+                    effect_ci_high = np.percentile(diff_samples, 97.5)
+                    se_diff = np.std(diff_samples)
+                else:
+                    # Fallback: symmetric CI from individual CIs
+                    se_off = (off_boot['hi'] - off_boot['lo']) / 3.92
+                    se_on = (on_boot['hi'] - on_boot['lo']) / 3.92
+                    se_diff = np.sqrt(se_off**2 + se_on**2)
+                    effect_ci_low = effect - 1.96 * se_diff
+                    effect_ci_high = effect + 1.96 * se_diff
+                
+                # Get trial counts for SSHOM data
+                trials_off = off_boot.get('n_trials', 0) if is_sshom_data else len(alg_data[alg_data[heuristic] == 0])
+                trials_on = on_boot.get('n_trials', 0) if is_sshom_data else len(alg_data[alg_data[heuristic] == 1])
+                
+                # Convert to percentage if this is SSHOM data
+                if 'sshom' in response_column.lower():
+                    bootstrap_effects.append({
+                        'algorithm': algorithm,
+                        'factor': heuristic,
+                        'effect_pp': effect * 100,  # percentage points
+                        'level_off': off_boot['mean'] * 100,
+                        'level_on': on_boot['mean'] * 100,
+                        'ci_low_pp': effect_ci_low * 100,
+                        'ci_high_pp': effect_ci_high * 100,
+                        'se_diff_pp': se_diff * 100,
+                        'trials_off': trials_off,
+                        'trials_on': trials_on,
+                        'B': self.bootstrap_n,
+                        'seed': self.bootstrap_seed,
+                        'method': 'Bootstrap'
+                    })
+                else:
+                    # Runtime: already in milliseconds
+                    bootstrap_effects.append({
+                        'algorithm': algorithm,
+                        'factor': heuristic,
+                        'effect': effect,
+                        'level_off': off_boot['mean'],
+                        'level_on': on_boot['mean'],
+                        'ci_low': effect_ci_low,
+                        'ci_high': effect_ci_high,
+                        'se_diff': se_diff,
+                        'n_off': trials_off,
+                        'n_on': trials_on,
+                        'B': self.bootstrap_n,
+                        'seed': self.bootstrap_seed,
+                        'method': 'Bootstrap'
+                    })
         
-        emm_df = pd.DataFrame(emm_effects)
-        logger.info(f"Generated {len(emm_df)} EMM effects")
+        effects_df = pd.DataFrame(bootstrap_effects)
         
-        return emm_df
+        logger.info(f"\n{'='*60}")
+        logger.info(f"BOOTSTRAP CALCULATION SUMMARY")
+        logger.info(f"{'='*60}")
+        logger.info(f"Total effects generated: {len(effects_df)}")
+        if len(effects_df) > 0:
+            logger.info(f"Algorithms: {effects_df['algorithm'].unique().tolist()}")
+        logger.info(f"{'='*60}\n")
+        
+        return effects_df
     
     def generate_main_effects_data(self, data, response_column):
         """Generate main effects data with confidence intervals."""
@@ -884,8 +952,16 @@ class L12AnalysisEnhanced:
         return pd.DataFrame(main_effects)
     
     def generate_interaction_effects_data(self, data, response_column):
-        """Generate Algorithm×Heuristic interaction data with confidence intervals."""
+        """
+        Generate Algorithm×Heuristic interaction data with confidence intervals.
+        
+        Uses bootstrap_prop_ci() for SSHOM data (binomial proportions),
+        uses bootstrap_confidence_interval() for runtime data (continuous).
+        """
         logger.info(f"Generating interaction effects data for {response_column}")
+        
+        # Check if this is SSHOM data (binomial) vs runtime data (continuous)
+        is_sshom_data = 'sshom_rate' in response_column.lower()
         
         interactions = []
         
@@ -902,72 +978,44 @@ class L12AnalysisEnhanced:
                     
                     if len(subset) == 0:
                         continue
-                        
-                    response_values = subset[response_column].dropna()
                     
-                    if len(response_values) > 0:
-                        mean_val, ci_low, ci_high = self.bootstrap_confidence_interval(response_values)
+                    # Use appropriate bootstrap method based on data type
+                    if is_sshom_data:
+                        # For SSHOM: Use row-level bootstrap on binomial proportions
+                        result = bootstrap_prop_ci(
+                            subset, 
+                            heuristic_col=heuristic,
+                            level_val=level,
+                            algorithm=algorithm,
+                            B=self.bootstrap_n,
+                            seed=self.bootstrap_seed,
+                            return_samples=False
+                        )
+                        # bootstrap_prop_ci returns proportion [0,1], convert to percentage
+                        mean_val = result['mean'] * 100
+                        ci_low = result['lo'] * 100
+                        ci_high = result['hi'] * 100
+                    else:
+                        # For runtime: Use traditional bootstrap on continuous values
+                        response_values = subset[response_column].dropna()
                         
-                        interactions.append({
-                            'heuristic': heuristic,
-                            'level': level,
-                            'algorithm': algorithm,
-                            'mean': mean_val,
-                            'ci_low': ci_low,
-                            'ci_high': ci_high,
-                            'n_obs': len(response_values)
-                        })
+                        if len(response_values) == 0:
+                            continue
+                            
+                        mean_val, ci_low, ci_high = self.bootstrap_confidence_interval(response_values)
+                    
+                    interactions.append({
+                        'heuristic': heuristic,
+                        'level': level,
+                        'algorithm': algorithm,
+                        'mean': mean_val,
+                        'ci_low': ci_low,
+                        'ci_high': ci_high,
+                        'n_obs': len(subset),
+                        'method': 'Bootstrap (binomial)' if is_sshom_data else 'Bootstrap (continuous)'
+                    })
                         
         return pd.DataFrame(interactions)
-    
-    def calculate_pareto_frontier(self, data, x_col, y_col):
-        """Calculate Pareto frontier for two objectives (minimize x, maximize y)."""
-        logger.info(f"Calculating Pareto frontier for {x_col} vs {y_col}")
-        
-        # Prepare data points
-        points = data[[x_col, y_col]].dropna().copy()
-        
-        if len(points) < 3:
-            logger.warning("Not enough points for Pareto frontier calculation")
-            data['is_pareto'] = 0
-            return data
-        
-        # For Pareto frontier: minimize runtime (x), maximize success rate (y)
-        # Transform to minimize both: (x, -y)
-        transformed_points = points.copy()
-        transformed_points[y_col] = -transformed_points[y_col]
-        
-        # Find Pareto frontier points
-        pareto_mask = np.zeros(len(points), dtype=bool)
-        
-        for i in range(len(points)):
-            is_pareto = True
-            current_point = transformed_points.iloc[i]
-            
-            for j in range(len(points)):
-                if i == j:
-                    continue
-                    
-                other_point = transformed_points.iloc[j]
-                
-                # Check if other point dominates current point
-                if (other_point[x_col] <= current_point[x_col] and 
-                    other_point[y_col] <= current_point[y_col] and
-                    (other_point[x_col] < current_point[x_col] or 
-                     other_point[y_col] < current_point[y_col])):
-                    is_pareto = False
-                    break
-                    
-            pareto_mask[i] = is_pareto
-        
-        # Add Pareto frontier indicator to original data
-        data_copy = data.copy()
-        data_copy['is_pareto'] = 0
-        data_copy.loc[points.index[pareto_mask], 'is_pareto'] = 1
-        
-        logger.info(f"Found {np.sum(pareto_mask)} Pareto optimal points")
-        
-        return data_copy
     
     def setup_output_directory(self, solution_name):
         """Set up the output directory structure."""
@@ -989,9 +1037,25 @@ class L12AnalysisEnhanced:
         logger.info(f"Saved LaTeX CSV: {output_path}")
     
     def plot_main_effects(self, main_effects_sshom, main_effects_runtime, sshom_col, runtime_col):
-        """Generate Plot 1: Main effects with 95% CIs (two panels) using EMM differences."""
-        logger.info("Generating main effects plots with EMM-based confidence intervals...")
+        """Generate Plot 1: Main effects with 95% CIs (two panels) using bootstrap differences."""
+        logger.info("\n" + "="*60)
+        logger.info("GENERATING MAIN EFFECTS PLOTS")
+        logger.info("="*60)
         logger.info(f"Plot 1 using CORRECTED {sshom_col} (includes filtered HOMs in denominator)")
+        logger.info(f"Bootstrap parameters: B={self.bootstrap_n}, seed={self.bootstrap_seed}")
+        
+        # Log incoming data
+        logger.info(f"\nSSHOM data received: {len(main_effects_sshom)} rows")
+        if not main_effects_sshom.empty:
+            logger.info(f"  Algorithms in SSHOM data: {main_effects_sshom['algorithm'].unique().tolist()}")
+            logger.info(f"  Factors in SSHOM data: {main_effects_sshom['factor'].unique().tolist() if 'factor' in main_effects_sshom.columns else 'NO FACTOR COLUMN'}")
+            logger.info(f"  Columns: {main_effects_sshom.columns.tolist()}")
+        else:
+            logger.error("❌ SSHOM data is EMPTY!")
+            
+        logger.info(f"\nRuntime data received: {len(main_effects_runtime)} rows")
+        if not main_effects_runtime.empty:
+            logger.info(f"  Algorithms in runtime data: {main_effects_runtime['algorithm'].unique().tolist()}")
         
         # Set up the figure with two subplots
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
@@ -1005,11 +1069,21 @@ class L12AnalysisEnhanced:
         width = 0.35
         
         # Plot 1A: SSHOM Success Rate Main Effects
+        logger.info(f"\nPlotting Panel A (SSHOM)...")
         if not main_effects_sshom.empty:
             
             for i, alg in enumerate(['genetic', 'local']):
                 alg_data = main_effects_sshom[main_effects_sshom['algorithm'] == alg]
                 
+                logger.info(f"\n  Processing {alg}:")
+                logger.info(f"    Rows for {alg}: {len(alg_data)}")
+                
+                if len(alg_data) == 0:
+                    logger.error(f"    ❌ NO DATA for {alg} - will have NO BARS!")
+                else:
+                    logger.info(f"    ✓ Data available for {alg}")
+                    logger.info(f"    Sample data:\n{alg_data.head()}")
+
                 means = []
                 ci_lows = []
                 ci_highs = []
@@ -1017,13 +1091,22 @@ class L12AnalysisEnhanced:
                 for factor in factors:
                     factor_data = alg_data[alg_data['factor'] == factor]
                     
+                    logger.debug(f"      {alg}-{factor}: {len(factor_data)} rows")
+                    
                     if len(factor_data) > 0:
-                        # Check if this is EMM data (has 'effect' column) or bootstrap data
-                        if 'effect' in factor_data.columns:
-                            # EMM-based analysis
+                        # Check which column name convention is used (new: effect_pp, old: effect)
+                        if 'effect_pp' in factor_data.columns:
+                            # New format with explicit _pp suffix for percentage points
+                            effect = factor_data['effect_pp'].iloc[0]
+                            ci_low = factor_data['ci_low_pp'].iloc[0]
+                            ci_high = factor_data['ci_high_pp'].iloc[0]
+                            logger.debug(f"        Using bootstrap data: effect={effect:.2f} pp")
+                        elif 'effect' in factor_data.columns:
+                            # Old format (fallback for compatibility)
                             effect = factor_data['effect'].iloc[0]
                             ci_low = factor_data['ci_low'].iloc[0]
                             ci_high = factor_data['ci_high'].iloc[0]
+                            logger.debug(f"        Using legacy data: effect={effect:.2f}")
                         else:
                             # Bootstrap-based analysis (fallback)
                             if len(factor_data) >= 2:
@@ -1054,18 +1137,22 @@ class L12AnalysisEnhanced:
                     ci_lows.append(effect - ci_low)  # Error bar size below
                     ci_highs.append(ci_high - effect)  # Error bar size above
                 
+                # TODO: Re-enable error bars after fixing bootstrap correlation issue
                 ax1.bar(x_pos + i*width, means, width, 
-                       yerr=[ci_lows, ci_highs], capsize=3,
+                       yerr=[ci_lows, ci_highs], capsize=3,  
                        label=alg.title(), color=colors[alg], alpha=0.8)
             
             ax1.set_xlabel('Heuristic Factors')
-            ax1.set_ylabel(f'Effect on {sshom_col} (EMM High - Low)')
-            ax1.set_title('Panel A: Main Effects on SSHOM Success Rate\n(EMM Differences with 95% CIs)')
+            ax1.set_ylabel('SSHOM rate (pp, ON - OFF)')
+            ax1.set_title('Panel A: Main Effects on SSHOM Success Rate\n(Bootstrap difference, 95% CI)')
             ax1.set_xticks(x_pos + width/2)
             ax1.set_xticklabels(factors, rotation=45, ha='right')
             ax1.axhline(y=0, color='black', linestyle='-', alpha=0.3)
             ax1.legend()
             ax1.grid(True, alpha=0.3)
+            # Clip y-axis to reasonable percentage range
+            y_min, y_max = ax1.get_ylim()
+            ax1.set_ylim(max(-100, y_min), min(100, y_max))
         
         # Plot 1B: Runtime Main Effects
         if not main_effects_runtime.empty:
@@ -1080,9 +1167,9 @@ class L12AnalysisEnhanced:
                     factor_data = alg_data[alg_data['factor'] == factor]
                     
                     if len(factor_data) > 0:
-                        # Check if this is EMM data (has 'effect' column) or bootstrap data
+                        # Check column format (new: effect_pp, old: effect)
                         if 'effect' in factor_data.columns:
-                            # EMM-based analysis
+                            # Legacy format (old column names)
                             effect = factor_data['effect'].iloc[0]
                             ci_low = factor_data['ci_low'].iloc[0]
                             ci_high = factor_data['ci_high'].iloc[0]
@@ -1108,7 +1195,7 @@ class L12AnalysisEnhanced:
                                 else:
                                     ci_low = ci_high = effect
                             else:
-                                effect = ci_low = ci_high = 0
+                                effect = ci_low = ci_high = 0   
                     else:
                         effect = ci_low = ci_high = 0
                     
@@ -1121,8 +1208,8 @@ class L12AnalysisEnhanced:
                        label=alg.title(), color=colors[alg], alpha=0.8)
             
             ax2.set_xlabel('Heuristic Factors')
-            ax2.set_ylabel(f'Effect on {runtime_col} (EMM High - Low)')
-            ax2.set_title('Panel B: Main Effects on Runtime\n(EMM Differences with 95% CIs)')
+            ax2.set_ylabel('Runtime (ms, ON - OFF)')
+            ax2.set_title('Panel B: Main Effects on Runtime\n(Bootstrap difference, 95% CI)')
             ax2.set_xticks(x_pos + width/2)
             ax2.set_xticklabels(factors, rotation=45, ha='right')
             ax2.axhline(y=0, color='black', linestyle='-', alpha=0.3)
@@ -1178,10 +1265,11 @@ class L12AnalysisEnhanced:
                             ci_lows.append(mean_val - ci_low)
                             ci_highs.append(ci_high - mean_val)
                         
-                        # Plot the line with error bars
+                        ax.plot(levels, means, marker='o', linewidth=2,
+                               label=alg.title(), color=colors[alg])
                         ax.errorbar(levels, means, yerr=[ci_lows, ci_highs], 
-                                   marker='o', linewidth=2, capsize=3,
-                                   label=alg.title(), color=colors[alg])
+                                    marker='o', linewidth=2, capsize=3,
+                                    label=alg.title(), color=colors[alg])  
             
             ax.set_xlabel(f'{heuristic}\n(0=OFF, 1=ON)')
             ax.set_ylabel(f'{sshom_col}')
@@ -1206,65 +1294,6 @@ class L12AnalysisEnhanced:
         plt.savefig(plot_path, dpi=300, bbox_inches='tight')
         plt.close()
         logger.info(f"Saved interaction effects plot: {plot_path}")
-        
-        return plot_path
-    
-    def plot_pareto_frontier(self, pareto_data):
-        """Generate Plot 3: Pareto frontier scatter plot."""
-        logger.info("Generating Pareto frontier plot...")
-        
-        fig, ax = plt.subplots(figsize=(10, 8))
-        
-        colors = {'genetic': '#1f77b4', 'local': '#ff7f0e'}
-        
-        # Plot all points
-        for alg in ['genetic', 'local']:
-            alg_data = pareto_data[pareto_data['algorithm'] == alg]
-            
-            if not alg_data.empty:
-                # Non-Pareto points
-                non_pareto = alg_data[alg_data['is_pareto'] == 0]
-                if len(non_pareto) > 0:
-                    ax.scatter(non_pareto['runtime'], non_pareto['sshom_success'], 
-                              color=colors[alg], alpha=0.6, s=50, label=f'{alg.title()} (dominated)')
-                
-                # Pareto optimal points
-                pareto_points = alg_data[alg_data['is_pareto'] == 1]
-                if len(pareto_points) > 0:
-                    ax.scatter(pareto_points['runtime'], pareto_points['sshom_success'], 
-                              color=colors[alg], alpha=1.0, s=100, marker='D', 
-                              edgecolors='black', linewidth=1, 
-                              label=f'{alg.title()} (Pareto optimal)')
-        
-        # Draw Pareto frontier line
-        pareto_optimal = pareto_data[pareto_data['is_pareto'] == 1].copy()
-        if len(pareto_optimal) > 1:
-            # Sort by runtime for proper line drawing
-            pareto_optimal = pareto_optimal.sort_values('runtime')
-            ax.plot(pareto_optimal['runtime'], pareto_optimal['sshom_success'], 
-                   color='red', linewidth=2, linestyle='--', alpha=0.8, 
-                   label='Pareto Frontier')
-        
-        ax.set_xlabel('Runtime (ms)')
-        ax.set_ylabel('SSHOM Success Rate (%)')
-        ax.set_title('Pareto Frontier Analysis: SSHOM Success Rate vs Runtime Trade-off')
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-        
-        # Add annotation
-        ax.text(0.02, 0.98, 
-               'Points on frontier represent\noptimal trade-offs between\nsuccess rate and runtime',
-               transform=ax.transAxes, fontsize=10, 
-               bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
-               verticalalignment='top')
-        
-        plt.tight_layout()
-        
-        # Save the plot
-        plot_path = self.output_dir / "plot3_pareto_frontier.png"
-        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-        plt.close()
-        logger.info(f"Saved Pareto frontier plot: {plot_path}")
         
         return plot_path
         
@@ -1331,39 +1360,19 @@ class L12AnalysisEnhanced:
             
         logger.info(f"Using columns: {actual_sshom_col} and {actual_runtime_col}")
         
-        # Generate CSV 1: EMM-based main effects for SSHOM success rate
-        main_effects_sshom = self.calculate_emm_effects(experiment_data, actual_sshom_col)
-        self.save_latex_csv(main_effects_sshom, 'main_effects_emm_latex.csv')
+        # Generate CSV 1: Bootstrap main effects for SSHOM success rate
+        main_effects_sshom = self.calculate_bootstrap_main_effects(experiment_data, actual_sshom_col)
+        self.save_latex_csv(main_effects_sshom, 'main_effects_bootstrap_latex.csv')
         
-        # Generate CSV 2: EMM-based main effects for runtime  
-        main_effects_runtime = self.calculate_emm_effects(experiment_data, actual_runtime_col)
-        self.save_latex_csv(main_effects_runtime, 'main_effects_runtime_emm_latex.csv')
-        
-        # Also generate bootstrap versions for comparison
-        main_effects_sshom_bootstrap = self.generate_main_effects_data(experiment_data, actual_sshom_col)
-        self.save_latex_csv(main_effects_sshom_bootstrap, 'main_effects_bootstrap_latex.csv')
-        
-        main_effects_runtime_bootstrap = self.generate_main_effects_data(experiment_data, actual_runtime_col)
-        self.save_latex_csv(main_effects_runtime_bootstrap, 'main_effects_runtime_bootstrap_latex.csv')
+        # Generate CSV 2: Bootstrap main effects for runtime  
+        main_effects_runtime = self.calculate_bootstrap_main_effects(experiment_data, actual_runtime_col)
+        self.save_latex_csv(main_effects_runtime, 'main_effects_runtime_bootstrap_latex.csv')
         
         # Generate CSV 3: Interaction effects for SSHOM success rate
         interaction_effects = self.generate_interaction_effects_data(experiment_data, actual_sshom_col)
         self.save_latex_csv(interaction_effects, 'interaction_effects_latex.csv')
         
-        # Generate CSV 4: Pareto frontier data
-        pareto_data = self.calculate_pareto_frontier(
-            experiment_data, 
-            actual_runtime_col, 
-            actual_sshom_col
-        )
-        
-        # Select relevant columns for Pareto plot
-        pareto_output = pareto_data[['algorithm', actual_runtime_col, actual_sshom_col, 'is_pareto']].copy()
-        pareto_output.columns = ['algorithm', 'runtime', 'sshom_success', 'is_pareto']
-        
-        self.save_latex_csv(pareto_output, 'pareto_data_latex.csv')
-        
-        # Generate the three main plots
+        # Generate the two main plots
         logger.info("Generating publication-quality plots...")
         
         plot_files = []
@@ -1377,24 +1386,15 @@ class L12AnalysisEnhanced:
         plot2_path = self.plot_interaction_effects(interaction_effects, actual_sshom_col)
         plot_files.append(plot2_path)
         
-        # Plot 3: Pareto frontier scatter plot
-        plot3_path = self.plot_pareto_frontier(pareto_output)
-        plot_files.append(plot3_path)
-        
         # Generate summary report
         self.generate_summary_report(experiment_data, actual_sshom_col, actual_runtime_col)
         
-        logger.info("Analysis complete! Generated 6 CSV files, 1 summary text file, and 3 PNG plots:")
+        logger.info("Analysis complete! Generated 3 CSV files, 1 summary text file, and 2 PNG plots:")
         logger.info(f"Output directory: {self.output_dir}")
-        logger.info("CSV FILES (EMM-BASED):")
-        logger.info("- main_effects_emm_latex.csv (EMM main effects data)")  
-        logger.info("- main_effects_runtime_emm_latex.csv (EMM runtime effects data)")
-        logger.info("CSV FILES (BOOTSTRAP-BASED):")
-        logger.info("- main_effects_bootstrap_latex.csv (bootstrap main effects data)")  
-        logger.info("- main_effects_runtime_bootstrap_latex.csv (bootstrap runtime effects data)")
-        logger.info("CSV FILES (OTHER):")
-        logger.info("- interaction_effects_latex.csv (interaction data)")
-        logger.info("- pareto_data_latex.csv (Pareto frontier data)")
+        logger.info("CSV DATA FILES:")
+        logger.info("- main_effects_bootstrap_latex.csv (bootstrap main effects for SSHOM)")  
+        logger.info("- main_effects_runtime_bootstrap_latex.csv (bootstrap main effects for runtime)")
+        logger.info("- interaction_effects_latex.csv (bootstrap interaction effects)")
         logger.info("SUMMARY:")
         logger.info("- analysis_summary.txt (analysis report)")
         logger.info("PNG PLOTS:")
@@ -1437,28 +1437,20 @@ class L12AnalysisEnhanced:
         summary_lines.extend([
             "",
             "FILES GENERATED:",
-            "EMM-BASED ANALYSIS (RECOMMENDED):",
-            "1. main_effects_emm_latex.csv - EMM main effects on SSHOM success rate",
-            "2. main_effects_runtime_emm_latex.csv - EMM main effects on runtime",
-            "",
-            "BOOTSTRAP ANALYSIS (FOR COMPARISON):",
-            "3. main_effects_bootstrap_latex.csv - Bootstrap main effects on SSHOM success rate", 
-            "4. main_effects_runtime_bootstrap_latex.csv - Bootstrap main effects on runtime",
-            "",
-            "OTHER DATA:",
-            "5. interaction_effects_latex.csv - Algorithm×Heuristic interactions",
-            "6. pareto_data_latex.csv - Pareto frontier analysis data",
+            "CSV DATA FILES:",
+            "1. main_effects_bootstrap_latex.csv - Bootstrap main effects on SSHOM success rate",
+            "2. main_effects_runtime_bootstrap_latex.csv - Bootstrap main effects on runtime",
+            "3. interaction_effects_latex.csv - Algorithm×Heuristic interaction effects",
             "",
             "PNG PLOTS:",
-            "1. plot1_main_effects.png - EMM main effects with proper 95% CIs (two panels)",
-            "2. plot2_interactions.png - Interaction plots (six small multiples)",  
-            "3. plot3_pareto_frontier.png - Pareto frontier scatter plot",
+            "1. plot1_main_effects.png - Main effects with bootstrap 95% CIs (two panels)",
+            "2. plot2_interactions.png - Interaction plots (six small multiples)",
             "",
             "STATISTICAL METHODS:",
-            f"- GLM-based EMM Analysis: {'Available (statsmodels)' if HAS_STATSMODELS else 'Unavailable (fallback to bootstrap)'}",
-            "- Method: Binomial GLM with logit link for SSHOM rates",
-            "- Confidence Intervals: Delta method (95% CIs) with bootstrap fallback",
-            "- L12 Design-aware: Yes (EMM method accounts for orthogonal structure)",
+            "- Bootstrap-based Analysis: Stratified row-level resampling",
+            f"- Method: {self.bootstrap_n} bootstrap samples (seed={self.bootstrap_seed}) for all CI calculations",
+            "- Confidence Intervals: 95% percentile CIs (2.5th and 97.5th percentiles)",
+            "- L12 Design-aware: Yes (hierarchical bootstrap respects orthogonal structure)",
             "",
             "SIGNIFICANCE SCHEME (unified across all analyses):",
             "- *** p<0.001 (highly significant)",
@@ -1471,15 +1463,31 @@ class L12AnalysisEnhanced:
         
         summary_text = "\n".join(summary_lines)
         
-        # Save summary to file
+        # Save summary to file with UTF-8 encoding to support Unicode characters
         summary_path = self.output_dir / "analysis_summary.txt"
-        with open(summary_path, 'w') as f:
+        with open(summary_path, 'w', encoding='utf-8') as f:
             f.write(summary_text)
             
-        # Also print to console
-        print(summary_text)
+        # Also print to console (encode to handle Unicode in Windows console)
+        try:
+            print(summary_text)
+        except UnicodeEncodeError:
+            # Fallback for Windows console that doesn't support UTF-8
+            print(summary_text.encode('ascii', 'replace').decode('ascii'))
         
         logger.info(f"Summary report saved to: {summary_path}")
+
+
+def safe_print(text):
+    """Print text with fallback for Windows console Unicode issues."""
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        # Replace Unicode characters for Windows console
+        replacements = {'†': 'T', '≥': '>=', '×': 'x', '•': '*'}
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+        print(text)
 
 
 def main():
@@ -1500,78 +1508,92 @@ def main():
         type=str,
         help="Specific solution name to analyze (optional)"
     )
+    parser.add_argument(
+        "--bootstrap",
+        type=int,
+        default=2000,
+        help="Number of bootstrap samples (default: 2000)"
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for reproducibility (default: 42)"
+    )
     
     args = parser.parse_args()
     
-    # Determine the root path
-    if args.root:
-        root_path = Path(args.root)
-    else:
-        root_path = Path.cwd()
-    
-    if not root_path.exists():
-        logger.error(f"Root path does not exist: {root_path}")
+    # Validate root path
+    if not args.root:
+        logger.error("ERROR: --root parameter is required")
+        logger.error("Usage: python analyze_homcsv_enhanced.py --root <path> [--solution <name>]")
         return
     
-    logger.info(f"Analyzing data from: {root_path}")
+    root_path = Path(args.root)
+    
+    if not root_path.exists():
+        logger.error(f"ERROR: Root path does not exist: {root_path}")
+        logger.error(f"Please provide a valid directory path containing experimental data")
+        return
+    
+    if not root_path.is_dir():
+        logger.error(f"ERROR: Root path is not a directory: {root_path}")
+        return
+    
+    logger.info(f"✓ Root path validated: {root_path}")
+    logger.info(f"Bootstrap settings: B={args.bootstrap}, seed={args.seed}")
     
     # Initialize analyzer with specified path
-    analyzer = L12AnalysisEnhanced(base_path=root_path)
+    analyzer = L12AnalysisEnhanced(
+        base_path=root_path, 
+        solution=args.solution,
+        bootstrap_n=args.bootstrap,
+        bootstrap_seed=args.seed
+    )
     
     # Run complete analysis
     plot_files = analyzer.run_complete_analysis()
     
-    print("\n" + "="*60)
-    print("ANALYSIS COMPLETE!")
-    print("="*60)
-    print(f"\nGenerated files in: {analyzer.output_dir}")
-    print("\nCSV DATA FILES:")
-    print("EMM-BASED (RECOMMENDED):")
-    print("- main_effects_emm_latex.csv")
-    print("- main_effects_runtime_emm_latex.csv")
-    print("BOOTSTRAP-BASED (COMPARISON):")
-    print("- main_effects_bootstrap_latex.csv")
-    print("- main_effects_runtime_bootstrap_latex.csv")
-    print("OTHER:")
-    print("- interaction_effects_latex.csv")
-    print("- pareto_data_latex.csv")
-    print("- analysis_summary.txt")
+    safe_print("\n" + "="*60)
+    safe_print("ANALYSIS COMPLETE!")
+    safe_print("="*60)
+    safe_print(f"\nGenerated files in: {analyzer.output_dir}")
+    safe_print("\nCSV DATA FILES:")
+    safe_print("- main_effects_bootstrap_latex.csv (bootstrap main effects for SSHOM)")
+    safe_print("- main_effects_runtime_bootstrap_latex.csv (bootstrap main effects for runtime)")
+    safe_print("- interaction_effects_latex.csv (bootstrap interaction effects)")
+    safe_print("- analysis_summary.txt (analysis report)")
     
-    print("\nPNG PLOT FILES:")
+    safe_print("\nPNG PLOT FILES:")
     if plot_files:
         for plot_file in plot_files:
-            print(f"- {plot_file.name}")
+            safe_print(f"- {plot_file.name}")
     else:
-        print("- plot1_main_effects.png")
-        print("- plot2_interactions.png")
-        print("- plot3_pareto_frontier.png")
+        safe_print("- plot1_main_effects.png")
+        safe_print("- plot2_interactions.png")
     
-    print("\nPLOT DESCRIPTIONS:")
-    print("1. plot1_main_effects.png - GLM-based EMM main effects with proper 95% CIs")
-    print("   • Panel A: SSHOM success rate effects (GLM EMM differences)")
-    print("   • Panel B: Runtime effects (bootstrap differences)")
-    print("   • Uses Binomial GLM (logit link) for SSHOM rates")
-    print("   • Accounts for L12 orthogonal array structure")
-    print("   • Proper confidence intervals via delta method")
-    print("2. plot2_interactions.png - Algorithm×Heuristic interactions")
-    print("   • Six small multiples (one per heuristic)")
-    print("   • Shows if heuristics work differently per algorithm")
-    print("3. plot3_pareto_frontier.png - Trade-off analysis")
-    print("   • Runtime vs SSHOM success rate")
-    print("   • Pareto frontier highlighted")
+    safe_print("\nPLOT DESCRIPTIONS:")
+    safe_print("1. plot1_main_effects.png - Bootstrap main effects with 95% CIs")
+    safe_print("   - Panel A: SSHOM success rate effects (bootstrap differences, ON - OFF)")
+    safe_print("   - Panel B: Runtime effects (bootstrap differences, ON - OFF)")
+    safe_print("   - Uses hierarchical bootstrap resampling respecting L12 structure")
+    safe_print("   - Samples 6 OA rows with replacement, then 5 repeats per row")
+    safe_print("   - Confidence intervals via percentile method (2.5th, 97.5th percentiles)")
+    safe_print("2. plot2_interactions.png - Algorithm x Heuristic interactions")
+    safe_print("   - Six small multiples (one per heuristic)")
+    safe_print("   - Shows if heuristics work differently per algorithm")
     
-    print("\nSTATISTICAL METHODS:")
-    print("- GLM-based EMM Analysis: Binomial GLM with logit link for SSHOM rates")
-    print("- Confidence Intervals: Delta method (95% CIs) with bootstrap fallback")
-    print("- Significance scheme: *** p<0.001, ** p<0.01, * p<0.05, † p<0.10, ns ≥0.10")
+    safe_print("\nSTATISTICAL METHODS:")
+    safe_print("- Hierarchical Bootstrap: Respects L12 structure (6 OA rows x 5 repeats)")
+    safe_print("- Confidence Intervals: 95% percentile CIs (2.5th and 97.5th percentiles)")
+    safe_print("- Effect CIs: Bootstrap distribution of differences (ON_samples - OFF_samples)")
     
-    print("\nNext steps:")
-    print("1. Review the PNG plots - ready for thesis inclusion!")
-    print("2. Check analysis_summary.txt for data overview")
-    print("3. Use GLM-based EMM CSV files for primary analysis (statistically rigorous)")
-    print("4. Use bootstrap CSV files for sensitivity analysis")
-    print("5. Install statsmodels if needed: pip install statsmodels")
-    print("="*60)
+    safe_print("\nNext steps:")
+    safe_print("1. Review the PNG plots - ready for thesis inclusion!")
+    safe_print("2. Check analysis_summary.txt for data overview")
+    safe_print("3. Use bootstrap CSV files for analysis (consistent method across all metrics)")
+    safe_print("4. Verify reproducibility by re-running with same seed (--seed 42)")
+    safe_print("="*60)
     
     
 if __name__ == "__main__":
