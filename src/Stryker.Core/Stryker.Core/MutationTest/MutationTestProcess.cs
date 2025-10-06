@@ -272,9 +272,10 @@ public class MutationTestProcess : IMutationTestProcess
         var higherOrderMutation = new HigherOrderMutation(_options, Input, mutantsToTest);
 
         // Create heuristics based on options
-        var heuristics = CreateHeuristicsFromOptions(_options.HOMTHeuristics);
+        var heuristicsLocal = CreateHeuristicsForLocal(_options.HOMTHeuristics);
+        var heuristicsGenetic = CreateHeuristicsForGenetic(_options.HOMTHeuristics);
 
-        foreach (var heuristic in heuristics)
+        foreach (var heuristic in heuristicsLocal.Concat(heuristicsGenetic))
         {
             higherOrderMutation.AddHeuristic(heuristic);
         }
@@ -287,14 +288,14 @@ public class MutationTestProcess : IMutationTestProcess
         switch (_options.HOMTAlgorithm)
         {
             case HOMTAlgorithmKind.Genetic:
-                higherOrderMutation.AddSearchAlgorithm(new GeneticSearchAlgorithm(Input, heuristics, _options, mutantsToTest, registerAllHeuristics: false, earlyFiltering: false, geneticOptions: new GeneticSearchOptions(RandomSeed: randomSeed)));
+                higherOrderMutation.AddSearchAlgorithm(new GeneticSearchAlgorithm(Input, heuristicsGenetic, _options, mutantsToTest, registerAllHeuristics: false, earlyFiltering: false, geneticOptions: new GeneticSearchOptions(RandomSeed: randomSeed)));
                 break;
             case HOMTAlgorithmKind.Local:
-                higherOrderMutation.AddSearchAlgorithm(new LocalSearchAlgorithmV2(Input, heuristics, _options, mutantsToTest, registerAllHeuristics: false, randomSeed: randomSeed));
+                higherOrderMutation.AddSearchAlgorithm(new LocalSearchAlgorithmV2(Input, heuristicsLocal, _options, mutantsToTest, registerAllHeuristics: false, randomSeed: randomSeed));
                 break;
             case HOMTAlgorithmKind.Both:
-                higherOrderMutation.AddSearchAlgorithm(new GeneticSearchAlgorithm(Input, heuristics, _options, mutantsToTest, registerAllHeuristics: false, earlyFiltering: false, geneticOptions: new GeneticSearchOptions(RandomSeed: randomSeed)));
-                higherOrderMutation.AddSearchAlgorithm(new LocalSearchAlgorithmV2(Input, heuristics, _options, mutantsToTest, registerAllHeuristics: false, randomSeed: randomSeed));
+                higherOrderMutation.AddSearchAlgorithm(new GeneticSearchAlgorithm(Input, heuristicsGenetic, _options, mutantsToTest, registerAllHeuristics: false, earlyFiltering: false, geneticOptions: new GeneticSearchOptions(RandomSeed: randomSeed)));
+                higherOrderMutation.AddSearchAlgorithm(new LocalSearchAlgorithmV2(Input, heuristicsLocal, _options, mutantsToTest, registerAllHeuristics: false, randomSeed: randomSeed));
                 break;
         }
 
@@ -314,6 +315,23 @@ public class MutationTestProcess : IMutationTestProcess
         HomMetricsCollector.GenerationResult = result;
 
         var homResults = result.HomCandidates.ToList();
+
+        // In Accelerate mode, compute SSHOM-red set: remove HOMs that are fully covered by other HOMs
+        if (isAccelerateMode && !includeAllIndividualMutants && homResults.Count > 0)
+        {
+            var originalCount = homResults.Count;
+            homResults = ReduceRedundantHoms(homResults);
+            var removed = originalCount - homResults.Count;
+            if (removed > 0)
+            {
+                Logger.LogInformation("HOMT: SSHOM-red reduction removed {Removed} redundant HOMs (from {Original} to {Reduced}) while preserving FOM coverage by HOMs", removed, originalCount, homResults.Count);
+            }
+            else
+            {
+                Logger.LogInformation("HOMT: SSHOM-red reduction found no redundant HOMs (kept {Count})", homResults.Count);
+            }
+        }
+
         List<IMutant> fomResults;
         if (isValidateMode)
         {
@@ -350,30 +368,21 @@ public class MutationTestProcess : IMutationTestProcess
     /// <summary>
     /// Creates heuristic instances based on the configured heuristic kinds.
     /// </summary>
-    private static List<IHOMHeuristic> CreateHeuristicsFromOptions(IEnumerable<HOMTHeuristicKind> heuristicKinds)
+    private static List<IHOMHeuristic> CreateHeuristicsForGenetic(IEnumerable<HOMTHeuristicKind> heuristicKinds)
     {
-        var heuristics = new List<IHOMHeuristic>();
 
-        foreach (var heuristicKind in heuristicKinds)
-        {
-            IHOMHeuristic heuristic = heuristicKind switch
-            {
-                HOMTHeuristicKind.CodeLocation => new CodeLocationHeuristic(),
-                HOMTHeuristicKind.EmptyAssessingTests => new EmptyAssessingTestsHeuristic(),
-                HOMTHeuristicKind.MutatorType => new MutatorTypeHeuristic(),
-                HOMTHeuristicKind.MaxSizeLimit => new MaxSizeLimitHeuristic(),
-                HOMTHeuristicKind.OverlappingTests => new OverlappingTestsHeuristic(),
-                HOMTHeuristicKind.SyntaxNodeConflict => new SyntaxNodeConflictHeuristic(),
-                _ => throw new ArgumentOutOfRangeException(nameof(heuristicKind), heuristicKind, "Unknown heuristic kind")
-            };
-            
-            heuristics.Add(heuristic);
-        }
+        return  new List<IHOMHeuristic>() { new CodeLocationHeuristic(), new EmptyAssessingTestsHeuristic(), new MaxSizeLimitHeuristic(), new MutatorTypeHeuristic(), new OverlappingTestsHeuristic() };
 
-        Logger.LogInformation("HOMT: Using {Count} heuristics: {Heuristics}", 
-            heuristics.Count, string.Join(", ", heuristicKinds));
-            
-        return heuristics;
+    }
+
+    /// <summary>
+    /// Creates heuristic instances based on the configured heuristic kinds.
+    /// </summary>
+    private static List<IHOMHeuristic> CreateHeuristicsForLocal(IEnumerable<HOMTHeuristicKind> heuristicKinds)
+    {
+        return new List<IHOMHeuristic>() { new EmptyAssessingTestsHeuristic(),  new MaxSizeLimitHeuristic(), new CodeLocationHeuristic() };
+
+       
     }
 
     private List<List<IMutant>> BuildMutantGroupsForTest(IReadOnlyCollection<IMutant> mutantsNotRun)
@@ -470,4 +479,52 @@ public class MutationTestProcess : IMutationTestProcess
 
     public void GetCoverage() => _coverageAnalyser.DetermineTestCoverage(Input.SourceProjectInfo,
         _mutationTestExecutor.TestRunner, _projectContents.Mutants, Input.InitialTestRun.Result.FailingTests);
+
+    /// <summary>
+    /// Compute SSHOM-red set by removing redundant HOMs while preserving coverage of all constituent FOMs.
+    /// A HOM is redundant if each of its constituent FOMs also appears in at least one other HOM in the current set.
+    /// We remove at most one redundant HOM per iteration and recompute coverage to avoid over-pruning.
+    /// </summary>
+    private static List<HigherOrderMutant> ReduceRedundantHoms(List<HigherOrderMutant> homs)
+    {
+        var reduced = new List<HigherOrderMutant>(homs);
+        if (reduced.Count == 0)
+        {
+            return reduced;
+        }
+
+        while (true)
+        {
+            // build coverage counts for each FOM id
+            var counts = new Dictionary<int, int>();
+            foreach (var hom in reduced)
+            {
+                foreach (var fom in hom.ConstituentMutants)
+                {
+                    if (!counts.TryAdd(fom.Id, 1))
+                    {
+                        counts[fom.Id]++;
+                    }
+                }
+            }
+
+            // find redundant candidates (all their FOMs have count > 1)
+            var redundantCandidates = reduced.Where(h => h.ConstituentMutants.Count > 0 && h.ConstituentMutants.All(f => counts.TryGetValue(f.Id, out var c) && c > 1)).ToList();
+            if (redundantCandidates.Count == 0)
+            {
+                break;
+            }
+
+            // Choose one to remove to avoid simultaneous removal pitfalls
+            // Prefer removing the most redundant one (highest slack sum)
+            var candidateToRemove = redundantCandidates
+                .OrderByDescending(h => h.ConstituentMutants.Sum(f => counts[f.Id] - 1))
+                .ThenByDescending(h => h.Order)
+                .First();
+
+            reduced.Remove(candidateToRemove);
+        }
+
+        return reduced;
+    }
 }

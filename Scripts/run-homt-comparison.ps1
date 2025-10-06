@@ -81,12 +81,6 @@ $configurations = @(
     IsBaseline = $true
   },
   @{
-    Name = 'accelerate-with-heuristics'
-    Description = 'ACCELERATE mode WITH heuristics (CodeLocation + MutatorType)'
-    Mode = 'accelerate'
-    Heuristics = @('CodeLocation', 'MutatorType')
-  },
-  @{
     Name = 'accelerate-with-heuristics-reduced'
     Description = 'ACCELERATE mode WITH heuristics (CodeLocation + MutatorType) - REDUCED redundant HOMs'
     Mode = 'accelerate'

@@ -31,6 +31,10 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         double ImmigrantMaxRatio = 0.10,
         int MaxOrder = 4,
         double FinalSelectionFomFactor = 0.10,
+        double HeuristicPopulationRatio = 0.3,
+        double DiversePopulationRatio = 0.5,
+        int MaxNeighbourhoodLimit = 20,
+        int MinFinalCandidates = 20,
         int? RandomSeed = null
     );
 
@@ -48,23 +52,11 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
         private List<IMutant> _bestCandidates;
         private readonly HeuristicRegistry _heuristicRegistry;
         private readonly GeneticSearchOptions _opts;
-
         private readonly ILogger<GeneticSearchAlgorithm> _logger;
         private readonly bool _earlyFiltering = false;
-        private readonly double _heuristicPopulationRatio = 0.3;
-        private readonly double _diversePopulationRatio = 0.5;
-        private readonly int _maxNeighbourhoodLimit = 20;
-
-        private readonly double _finalSelectionPercentage = 0.4;
-
-        private readonly int _minFinalCandidates = 20;
-
-        private readonly int _maxFinalCandidates = 500;
-
         private List<ScoredCandidate> _allCandidates;
         // Tracks genotype signatures for everything recorded in _allCandidates
         private HashSet<string> _allCandidateSignatures;
-
         // Track available FOM count for scaled final selection
         private int _availableFomsCount;
 
@@ -334,7 +326,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             var byFoms = (int)Math.Ceiling(_availableFomsCount * _opts.FinalSelectionFomFactor);
 
             // Keep proportion with no hard upper cap; enforce only minimum floor
-            var targetCount = Math.Max(_minFinalCandidates, byFoms);
+            var targetCount = Math.Max(_opts.MinFinalCandidates, byFoms);
 
             var finalCandidates = sortedCandidates.Take(targetCount).ToList();
 
@@ -353,7 +345,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             var maxRetries = populationSize * 50;
 
             // 1) Heuristic-guided candidates
-            var heuristicCount = (int)(populationSize * _heuristicPopulationRatio);
+            var heuristicCount = (int)(populationSize * _opts.HeuristicPopulationRatio);
             var heuristicCandidates = GenerateHeuristicGuidedCandidates(foms, heuristicCount);
             foreach (var candidate in heuristicCandidates)
             {
@@ -366,7 +358,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             }
 
             // 2) Diverse seeds
-            var seedCount = (int)(populationSize * _diversePopulationRatio);
+            var seedCount = (int)(populationSize * _opts.DiversePopulationRatio);
             var diverseSeeds = GenerateDiverseSeeds(foms, seedCount);
             foreach (var seed in diverseSeeds)
             {
@@ -971,7 +963,7 @@ namespace Stryker.Core.MutationTest.HigherOrderMutationTest.Algorithms
             var maxPairs = Math.Max(1, targetCount * 5);
             for (var i = 0; i < filteredFoms.Count && scoredPairs.Count < maxPairs; i++)
             {
-                var maxJForI = Math.Min(filteredFoms.Count, i + _maxNeighbourhoodLimit);
+                var maxJForI = Math.Min(filteredFoms.Count, i + _opts.MaxNeighbourhoodLimit);
                 for (var j = i + 1; j < maxJForI && scoredPairs.Count < maxPairs; j++)
                 {
                     var candidate = new List<IMutant> { filteredFoms[i], filteredFoms[j] };

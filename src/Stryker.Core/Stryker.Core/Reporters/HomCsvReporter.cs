@@ -18,6 +18,7 @@ namespace Stryker.Core.Reporters;
 
 /// <summary>
 /// Outputs a single-row CSV with HOMT/SSHOM metrics for easy analysis.
+/// Also supports non-HOMT runs (regular mutation testing) with generic stats.
 /// </summary>
 public class HomCsvReporter : IReporter
 {
@@ -57,6 +58,19 @@ public class HomCsvReporter : IReporter
         var totalRunDuration = HomMetricsCollector.TotalRunDuration;
         var randomSeed = HomMetricsCollector.RandomSeed;
 
+        // Generic mutation stats (work for HOMT and non-HOMT)
+        var allMutants = reportComponent.GetAllFiles().SelectMany(f => f.Mutants).ToList();
+        var totalMutants = allMutants.Count;
+        var killed = allMutants.Count(m => m.ResultStatus == MutantStatus.Killed);
+        var survived = allMutants.Count(m => m.ResultStatus == MutantStatus.Survived);
+        var timeout = allMutants.Count(m => m.ResultStatus == MutantStatus.Timeout);
+        var noCoverage = allMutants.Count(m => m.ResultStatus == MutantStatus.NoCoverage);
+        var ignored = allMutants.Count(m => m.ResultStatus == MutantStatus.Ignored);
+        var compileErrors = allMutants.Count(m => m.ResultStatus == MutantStatus.CompileError);
+        var detectedTotal = killed + timeout;
+        var undetectedTotal = survived + noCoverage;
+
+        // HOMT-specific (safe defaults for non-HOMT runs)
         int totalHoms = 0, hom2 = 0, hom3 = 0, hom4 = 0;
         var sshomRate = 0.0;
         int sshom2 = 0, sshom3 = 0, sshom4 = 0;
@@ -66,7 +80,9 @@ public class HomCsvReporter : IReporter
         var totalTestMs = totalRunDuration.TotalMilliseconds;
 
         // Additional requested metrics
-        var mode = (_options.OptimizationMode.HasFlag(OptimizationModes.HOMTValidate) ? "validate" : (_options.OptimizationMode.HasFlag(OptimizationModes.HOMTAccelerate) ? "accelerate" : string.Empty));
+        var mode = (
+            _options.OptimizationMode.HasFlag(OptimizationModes.HOMTValidate) ? "validate" :
+            (_options.OptimizationMode.HasFlag(OptimizationModes.HOMTAccelerate) ? "accelerate" : "standard"));
         var totalFomsInPool = HomMetricsCollector.TotalFomsInPool ?? 0;
         var uniqueConstituentFomsInHoms = 0;
         var missingFomsCount = 0;
@@ -164,6 +180,12 @@ public class HomCsvReporter : IReporter
                 usedAlgorithms = _options.HOMTAlgorithm.ToString();
             }
         }
+        else
+        {
+            // Non-HOMT run: provide sensible defaults
+            usedAlgorithms = string.Empty;
+            usedHeuristics = string.Empty;
+        }
 
         // Write CSV
         var filename = _options.ReportFileName + "-hom.csv";
@@ -177,7 +199,8 @@ public class HomCsvReporter : IReporter
 
         if (writeHeader)
         {
-            writer.WriteLine("total_homs,hom_2,hom_3,hom_4,sshom_rate_percent,sshom_2,sshom_3,sshom_4,hom_generation_ms,used_algorithms,used_heuristics,total_test_duration_ms,mutation_score_percent,raw_candidates_total,dup_within_total,dup_across_total,filtered_empty_total,filtered_invalid_total,per_algorithm_stats,random_seed,mode,total_foms_in_pool,unique_constituent_foms_in_homs_count,missing_foms_count,initial_tests_count,analysis_time_ms,test_runs_count,avg_perdicted_score_all_kept,median_predicted_score_all_kept,avg_predicted_score_sshoms,median_predicted_score_sshoms");
+            // Extended with generic (non-HOMT) stats columns at the end
+            writer.WriteLine("total_homs,hom_2,hom_3,hom_4,sshom_rate_percent,sshom_2,sshom_3,sshom_4,hom_generation_ms,used_algorithms,used_heuristics,total_test_duration_ms,mutation_score_percent,raw_candidates_total,dup_within_total,dup_across_total,filtered_empty_total,filtered_invalid_total,per_algorithm_stats,random_seed,mode,total_foms_in_pool,unique_constituent_foms_in_homs_count,missing_foms_count,initial_tests_count,analysis_time_ms,test_runs_count,avg_perdicted_score_all_kept,median_predicted_score_all_kept,avg_predicted_score_sshoms,median_predicted_score_sshoms,total_mutants,killed,survived,timeout,no_coverage,ignored,compile_errors,detected_total,undetected_total");
         }
 
         var fields = new[]
@@ -212,7 +235,17 @@ public class HomCsvReporter : IReporter
             avgPredAll.HasValue ? avgPredAll.Value.ToString("F4", CultureInfo.InvariantCulture) : string.Empty,
             medianPredAll.HasValue ? medianPredAll.Value.ToString("F4", CultureInfo.InvariantCulture) : string.Empty,
             avgPredSshom.HasValue ? avgPredSshom.Value.ToString("F4", CultureInfo.InvariantCulture) : string.Empty,
-            medianPredSshom.HasValue ? medianPredSshom.Value.ToString("F4", CultureInfo.InvariantCulture) : string.Empty
+            medianPredSshom.HasValue ? medianPredSshom.Value.ToString("F4", CultureInfo.InvariantCulture) : string.Empty,
+            // Generic stats appended
+            totalMutants.ToString(CultureInfo.InvariantCulture),
+            killed.ToString(CultureInfo.InvariantCulture),
+            survived.ToString(CultureInfo.InvariantCulture),
+            timeout.ToString(CultureInfo.InvariantCulture),
+            noCoverage.ToString(CultureInfo.InvariantCulture),
+            ignored.ToString(CultureInfo.InvariantCulture),
+            compileErrors.ToString(CultureInfo.InvariantCulture),
+            detectedTotal.ToString(CultureInfo.InvariantCulture),
+            undetectedTotal.ToString(CultureInfo.InvariantCulture)
         };
         writer.WriteLine(string.Join(",", fields));
 

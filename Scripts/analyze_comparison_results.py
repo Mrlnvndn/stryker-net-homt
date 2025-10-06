@@ -1,10 +1,32 @@
 #!/usr/bin/env python3
-"""
+# -*- coding: utf-8 -*-
+r"""
 Analyze HOMT Comparison Experiment Results
 
-This script analyzes results from the accelerate vs validate comparison experiments,
-providing comprehensive statistics to evaluate the effectiveness of predictive SSHOMs
-in real-world mutation testing with Stryker.NET.
+This script aggregates and analyzes the outputs from run-homt-comparison.ps1
+to compare different HOMT configurations across multiple repositories.
+
+Expected input structure (per repository):
+    C:\Users\MerlijnU\outputs\<RepoName>\comparison\
+    ├── baseline-fom-only\
+    │   ├── run01\reports\mutation-report.csv
+    │   ├── run02\reports\mutation-report.csv
+    │   └── ... (run01-run05)
+    ├── accelerate-with-heuristics-reduced\
+    │   ├── run01\reports\mutation-report-hom.csv
+    │   └── ... (run01-run05)
+    └── validate-with-heuristics\
+        ├── run01\reports\mutation-report-hom.csv
+        └── ... (run01-run05)
+
+Output files:
+    1. all_runs_combined.csv - Raw aggregated data
+    2. baseline_comparison.csv - Baseline vs HOMT performance
+    3. accelerate_summary.csv - Accelerate mode statistics
+    4. validate_summary.csv - SSHOM quality metrics
+    5. algorithm_performance_summary.csv - Per-algorithm comparison
+    6. Multiple PNG visualizations
+    7. EXECUTIVE_SUMMARY.txt - Narrative findings
 
 Usage:
     python analyze_comparison_results.py --out "C:\Users\MerlijnU\analysis\comparison"
@@ -46,7 +68,6 @@ REPOSITORIES = [
 
 CONFIGURATIONS = [
     'baseline-fom-only',
-    'accelerate-with-heuristics', 
     'accelerate-with-heuristics-reduced',
     'validate-with-heuristics'
 ]
@@ -182,10 +203,10 @@ def analyze_accelerate_mode(df: pd.DataFrame, out_dir: Path):
     """Analyze accelerate mode: runtime and test group efficiency."""
     print("\n=== ACCELERATE MODE ANALYSIS ===")
     
-    accel_df = df[df['config'] == 'accelerate-with-heuristics'].copy()
+    accel_df = df[df['config'] == 'accelerate-with-heuristics-reduced'].copy()
     
     if len(accel_df) == 0:
-        print("No accelerate data found!")
+        print("No accelerate-reduced data found!")
         return
     
     results = []
@@ -342,18 +363,15 @@ def analyze_validate_mode(df: pd.DataFrame, out_dir: Path):
 
 
 def analyze_baseline_comparison(df: pd.DataFrame, out_dir: Path):
-    """Compare baseline FOM-only vs accelerate modes for thesis."""
+    """Compare baseline FOM-only vs accelerate-reduced mode for thesis."""
     print("\n=== BASELINE COMPARISON ANALYSIS ===")
     
     # Filter for relevant configurations
     baseline_df = df[df['config'] == 'baseline-fom-only'].copy()
-    accel_df = df[df['config'] == 'accelerate-with-heuristics'].copy()
     accel_red_df = df[df['config'] == 'accelerate-with-heuristics-reduced'].copy()
     
     if len(baseline_df) == 0:
         print("WARNING: No baseline data found!")
-    if len(accel_df) == 0:
-        print("WARNING: No accelerate data found!")
     if len(accel_red_df) == 0:
         print("WARNING: No accelerate-reduced data found!")
     
@@ -361,7 +379,6 @@ def analyze_baseline_comparison(df: pd.DataFrame, out_dir: Path):
     
     for repo_name in df['repo_name'].unique():
         baseline_repo = baseline_df[baseline_df['repo_name'] == repo_name]
-        accel_repo = accel_df[accel_df['repo_name'] == repo_name]
         accel_red_repo = accel_red_df[accel_red_df['repo_name'] == repo_name]
         
         result = {'repo_name': repo_name}
@@ -393,33 +410,6 @@ def analyze_baseline_comparison(df: pd.DataFrame, out_dir: Path):
             result['baseline_mut_score_ci_lo'] = ms_lo
             result['baseline_mut_score_ci_hi'] = ms_hi
         
-        # Accelerate statistics
-        if len(accel_repo) > 0:
-            accel_runtimes = accel_repo['total_test_duration_ms'].values / 1000.0
-            accel_test_runs = accel_repo['test_runs_count'].values
-            accel_homs = accel_repo['total_homs'].values
-            accel_mut_score = accel_repo['mutation_score_percent'].values
-            
-            runtime_mean, runtime_lo, runtime_hi = bootstrap_ci(accel_runtimes)
-            test_runs_mean, tr_lo, tr_hi = bootstrap_ci(accel_test_runs)
-            homs_mean, homs_lo, homs_hi = bootstrap_ci(accel_homs)
-            mut_score_mean, ms_lo, ms_hi = bootstrap_ci(accel_mut_score)
-            
-            result['accel_n_runs'] = len(accel_repo)
-            result['accel_runtime_sec'] = runtime_mean
-            result['accel_runtime_ci_lo'] = runtime_lo
-            result['accel_runtime_ci_hi'] = runtime_hi
-            result['accel_runtime_sd'] = np.std(accel_runtimes, ddof=1)
-            result['accel_test_runs'] = test_runs_mean
-            result['accel_test_runs_ci_lo'] = tr_lo
-            result['accel_test_runs_ci_hi'] = tr_hi
-            result['accel_total_homs'] = homs_mean
-            result['accel_homs_ci_lo'] = homs_lo
-            result['accel_homs_ci_hi'] = homs_hi
-            result['accel_mutation_score'] = mut_score_mean
-            result['accel_mut_score_ci_lo'] = ms_lo
-            result['accel_mut_score_ci_hi'] = ms_hi
-        
         # Accelerate-reduced statistics
         if len(accel_red_repo) > 0:
             accel_red_runtimes = accel_red_repo['total_test_duration_ms'].values / 1000.0
@@ -447,32 +437,15 @@ def analyze_baseline_comparison(df: pd.DataFrame, out_dir: Path):
             result['accel_red_mut_score_ci_lo'] = ms_lo
             result['accel_red_mut_score_ci_hi'] = ms_hi
         
-        # Calculate speedup ratios
-        if 'baseline_runtime_sec' in result and 'accel_runtime_sec' in result:
-            if result['accel_runtime_sec'] > 0:
-                result['speedup_accel_vs_baseline'] = result['baseline_runtime_sec'] / result['accel_runtime_sec']
-        
+        # Calculate speedup ratio (baseline vs accelerate-reduced only)
         if 'baseline_runtime_sec' in result and 'accel_red_runtime_sec' in result:
             if result['accel_red_runtime_sec'] > 0:
-                result['speedup_accel_red_vs_baseline'] = result['baseline_runtime_sec'] / result['accel_red_runtime_sec']
+                result['speedup_vs_baseline'] = result['baseline_runtime_sec'] / result['accel_red_runtime_sec']
         
-        if 'accel_runtime_sec' in result and 'accel_red_runtime_sec' in result:
-            if result['accel_red_runtime_sec'] > 0:
-                result['speedup_accel_red_vs_accel'] = result['accel_runtime_sec'] / result['accel_red_runtime_sec']
-        
-        # Calculate test run reduction percentages
-        if 'baseline_test_runs' in result and 'accel_test_runs' in result:
-            if result['baseline_test_runs'] > 0:
-                result['test_reduction_accel_percent'] = 100 * (1 - result['accel_test_runs'] / result['baseline_test_runs'])
-        
+        # Calculate test run reduction percentage
         if 'baseline_test_runs' in result and 'accel_red_test_runs' in result:
             if result['baseline_test_runs'] > 0:
-                result['test_reduction_accel_red_percent'] = 100 * (1 - result['accel_red_test_runs'] / result['baseline_test_runs'])
-        
-        # Calculate HOM reduction (accelerate vs accelerate-reduced)
-        if 'accel_total_homs' in result and 'accel_red_total_homs' in result:
-            if result['accel_total_homs'] > 0:
-                result['hom_reduction_percent'] = 100 * (1 - result['accel_red_total_homs'] / result['accel_total_homs'])
+                result['test_reduction_percent'] = 100 * (1 - result['accel_red_test_runs'] / result['baseline_test_runs'])
         
         results.append(result)
     
@@ -488,16 +461,12 @@ def analyze_baseline_comparison(df: pd.DataFrame, out_dir: Path):
         print(f"\n{row['repo_name']}:")
         if 'baseline_runtime_sec' in row and not pd.isna(row['baseline_runtime_sec']):
             print(f"  Baseline runtime:        {row['baseline_runtime_sec']:8.1f}s")
-        if 'accel_runtime_sec' in row and not pd.isna(row['accel_runtime_sec']):
-            print(f"  Accelerate runtime:      {row['accel_runtime_sec']:8.1f}s")
         if 'accel_red_runtime_sec' in row and not pd.isna(row['accel_red_runtime_sec']):
             print(f"  Accelerate-reduced:      {row['accel_red_runtime_sec']:8.1f}s")
-        if 'speedup_accel_vs_baseline' in row and not pd.isna(row['speedup_accel_vs_baseline']):
-            print(f"  Speedup (accel/baseline):     {row['speedup_accel_vs_baseline']:.2f}x")
-        if 'speedup_accel_red_vs_baseline' in row and not pd.isna(row['speedup_accel_red_vs_baseline']):
-            print(f"  Speedup (accel-red/baseline): {row['speedup_accel_red_vs_baseline']:.2f}x")
-        if 'hom_reduction_percent' in row and not pd.isna(row['hom_reduction_percent']):
-            print(f"  HOM reduction:                {row['hom_reduction_percent']:.1f}%")
+        if 'speedup_vs_baseline' in row and not pd.isna(row['speedup_vs_baseline']):
+            print(f"  Speedup vs baseline:     {row['speedup_vs_baseline']:.2f}x")
+        if 'test_reduction_percent' in row and not pd.isna(row['test_reduction_percent']):
+            print(f"  Test reduction:          {row['test_reduction_percent']:.1f}%")
     
     return results_df
 
@@ -757,15 +726,13 @@ def create_baseline_visualizations(baseline_comparison: pd.DataFrame, out_dir: P
     repos = baseline_comparison['repo_name'].values
     x = np.arange(len(repos))
     
-    # 1. Runtime comparison: Baseline vs Accelerate vs Accelerate-Reduced
+    # 1. Runtime comparison: Baseline vs Accelerate-Reduced
     fig, ax = plt.subplots(figsize=(14, 7))
     
-    width = 0.25
+    width = 0.35
     
     baseline_runtimes = []
     baseline_errors = []
-    accel_runtimes = []
-    accel_errors = []
     accel_red_runtimes = []
     accel_red_errors = []
     
@@ -781,17 +748,6 @@ def create_baseline_visualizations(baseline_comparison: pd.DataFrame, out_dir: P
             baseline_runtimes.append(0)
             baseline_errors.append([0, 0])
         
-        # Accelerate
-        if 'accel_runtime_sec' in row and not pd.isna(row['accel_runtime_sec']):
-            mean = row['accel_runtime_sec']
-            lo = row['accel_runtime_ci_lo']
-            hi = row['accel_runtime_ci_hi']
-            accel_runtimes.append(mean)
-            accel_errors.append([mean - lo, hi - mean])
-        else:
-            accel_runtimes.append(0)
-            accel_errors.append([0, 0])
-        
         # Accelerate-Reduced
         if 'accel_red_runtime_sec' in row and not pd.isna(row['accel_red_runtime_sec']):
             mean = row['accel_red_runtime_sec']
@@ -804,19 +760,16 @@ def create_baseline_visualizations(baseline_comparison: pd.DataFrame, out_dir: P
             accel_red_errors.append([0, 0])
     
     baseline_errors = np.array(baseline_errors).T
-    accel_errors = np.array(accel_errors).T
     accel_red_errors = np.array(accel_red_errors).T
     
-    ax.bar(x - width, baseline_runtimes, width, label='Baseline (FOM only)', 
+    ax.bar(x - width/2, baseline_runtimes, width, label='Baseline (FOM only)', 
            yerr=baseline_errors, capsize=5, alpha=0.8, color='#95a5a6')
-    ax.bar(x, accel_runtimes, width, label='Accelerate', 
-           yerr=accel_errors, capsize=5, alpha=0.8, color='#2ecc71')
-    ax.bar(x + width, accel_red_runtimes, width, label='Accelerate-Reduced', 
-           yerr=accel_red_errors, capsize=5, alpha=0.8, color='#27ae60')
+    ax.bar(x + width/2, accel_red_runtimes, width, label='HOMT (Accelerate-Reduced)', 
+           yerr=accel_red_errors, capsize=5, alpha=0.8, color='#2ecc71')
     
     ax.set_xlabel('Repository', fontsize=12, fontweight='bold')
     ax.set_ylabel('Average Runtime (seconds)', fontsize=12, fontweight='bold')
-    ax.set_title('Runtime Comparison: Baseline vs HOMT Accelerate Modes', fontsize=14, fontweight='bold')
+    ax.set_title('Runtime Comparison: Baseline FOM vs HOMT', fontsize=14, fontweight='bold')
     ax.set_xticks(x)
     ax.set_xticklabels(repos, rotation=45, ha='right')
     ax.legend(fontsize=10)
@@ -831,17 +784,13 @@ def create_baseline_visualizations(baseline_comparison: pd.DataFrame, out_dir: P
     # 2. Speedup comparison
     fig, ax = plt.subplots(figsize=(14, 7))
     
-    speedup_accel = []
-    speedup_accel_red = []
+    speedup_values = []
     
     for _, row in baseline_comparison.iterrows():
-        speedup_accel.append(row.get('speedup_accel_vs_baseline', 0))
-        speedup_accel_red.append(row.get('speedup_accel_red_vs_baseline', 0))
+        speedup_values.append(row.get('speedup_vs_baseline', 0))
     
-    ax.bar(x - width/2, speedup_accel, width, label='Accelerate vs Baseline', 
+    ax.bar(x, speedup_values, width, label='HOMT vs Baseline', 
            alpha=0.8, color='#3498db')
-    ax.bar(x + width/2, speedup_accel_red, width, label='Accelerate-Reduced vs Baseline', 
-           alpha=0.8, color='#2980b9')
     
     # Add reference line at 1.0x (no speedup)
     ax.axhline(y=1.0, color='red', linestyle='--', linewidth=2, alpha=0.7, label='No speedup (1.0x)')
@@ -863,71 +812,23 @@ def create_baseline_visualizations(baseline_comparison: pd.DataFrame, out_dir: P
     # 3. Test run reduction percentage
     fig, ax = plt.subplots(figsize=(14, 7))
     
-    test_reduction_accel = []
-    test_reduction_accel_red = []
+    test_reduction_values = []
     
     for _, row in baseline_comparison.iterrows():
-        test_reduction_accel.append(row.get('test_reduction_accel_percent', 0))
-        test_reduction_accel_red.append(row.get('test_reduction_accel_red_percent', 0))
+        test_reduction_values.append(row.get('test_reduction_percent', 0))
     
-    ax.bar(x - width/2, test_reduction_accel, width, label='Accelerate', 
+    ax.bar(x, test_reduction_values, width, 
            alpha=0.8, color='#e74c3c')
-    ax.bar(x + width/2, test_reduction_accel_red, width, label='Accelerate-Reduced', 
-           alpha=0.8, color='#c0392b')
     
     ax.set_xlabel('Repository', fontsize=12, fontweight='bold')
     ax.set_ylabel('Test Run Reduction (%)', fontsize=12, fontweight='bold')
-    ax.set_title('Test Execution Reduction vs Baseline', fontsize=14, fontweight='bold')
+    ax.set_title('Test Execution Reduction: HOMT vs Baseline', fontsize=14, fontweight='bold')
     ax.set_xticks(x)
     ax.set_xticklabels(repos, rotation=45, ha='right')
-    ax.legend(fontsize=10)
     ax.grid(axis='y', alpha=0.3)
     
     plt.tight_layout()
     plot_path = out_dir / "baseline_test_reduction.png"
-    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-    print(f"Saved: {plot_path}")
-    plt.close()
-    
-    # 4. HOM reduction (Accelerate vs Accelerate-Reduced)
-    fig, ax = plt.subplots(figsize=(14, 7))
-    
-    hom_reduction = []
-    accel_homs = []
-    accel_red_homs = []
-    
-    for _, row in baseline_comparison.iterrows():
-        hom_reduction.append(row.get('hom_reduction_percent', 0))
-        accel_homs.append(row.get('accel_total_homs', 0))
-        accel_red_homs.append(row.get('accel_red_total_homs', 0))
-    
-    # Create two y-axes
-    ax2 = ax.twinx()
-    
-    # Bar chart for HOM counts
-    ax.bar(x - width/2, accel_homs, width, label='Accelerate HOMs', 
-           alpha=0.7, color='#f39c12')
-    ax.bar(x + width/2, accel_red_homs, width, label='Accelerate-Reduced HOMs', 
-           alpha=0.7, color='#e67e22')
-    
-    # Line chart for reduction percentage
-    ax2.plot(x, hom_reduction, 'ro-', linewidth=2, markersize=8, 
-             label='Reduction %', color='#c0392b')
-    
-    ax.set_xlabel('Repository', fontsize=12, fontweight='bold')
-    ax.set_ylabel('Total HOMs Generated', fontsize=12, fontweight='bold', color='#f39c12')
-    ax2.set_ylabel('HOM Reduction (%)', fontsize=12, fontweight='bold', color='#c0392b')
-    ax.set_title('HOM Reduction: Accelerate vs Accelerate-Reduced', fontsize=14, fontweight='bold')
-    ax.set_xticks(x)
-    ax.set_xticklabels(repos, rotation=45, ha='right')
-    ax.tick_params(axis='y', labelcolor='#f39c12')
-    ax2.tick_params(axis='y', labelcolor='#c0392b')
-    ax.legend(loc='upper left', fontsize=10)
-    ax2.legend(loc='upper right', fontsize=10)
-    ax.grid(axis='y', alpha=0.3)
-    
-    plt.tight_layout()
-    plot_path = out_dir / "hom_reduction_comparison.png"
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
     print(f"Saved: {plot_path}")
     plt.close()
@@ -1130,15 +1031,14 @@ def main():
     print(f"\nAll results saved to: {out_dir}")
     print("\nGenerated files:")
     print("  - all_runs_combined.csv (raw data)")
-    print("  - baseline_comparison.csv (baseline vs accelerate comparison)")
-    print("  - accelerate_summary.csv (accelerate mode statistics)")
+    print("  - baseline_comparison.csv (baseline vs HOMT comparison)")
+    print("  - accelerate_summary.csv (HOMT accelerate-reduced statistics)")
     print("  - validate_summary.csv (validate mode statistics)")
     print("  - algorithm_stats_detailed.csv (per-run algorithm performance)")
     print("  - algorithm_performance_summary.csv (aggregated algorithm statistics)")
     print("  - baseline_runtime_comparison.png (baseline vs HOMT runtimes)")
     print("  - baseline_speedup_comparison.png (speedup factors)")
     print("  - baseline_test_reduction.png (test execution reduction)")
-    print("  - hom_reduction_comparison.png (HOM reduction accelerate vs accelerate-reduced)")
     print("  - runtime_comparison.png (accelerate vs validate)")
     print("  - sshom_rate_comparison.png (SSHOM rates)")
     print("  - test_runs_efficiency.png (test group efficiency)")

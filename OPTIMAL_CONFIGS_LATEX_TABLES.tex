@@ -1,0 +1,374 @@
+% LaTeX Tables for Optimal Heuristic Configuration Analysis
+% Generated: October 4, 2025
+
+\documentclass{article}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{longtable}
+\usepackage{array}
+
+\begin{document}
+
+\section*{Optimal Heuristic Configurations - Analysis Data}
+
+% ============================================================================
+% TABLE 1: Optimal Configurations by Algorithm and Repository
+% ============================================================================
+
+\subsection*{Table 1: Optimal Heuristic Configurations}
+
+\begin{table}[h]
+\centering
+\small
+\caption{Optimal heuristic configurations for each algorithm by repository. Configuration shows which heuristics should be enabled (ON) for maximum SSHOM success rate.}
+\label{tab:optimal_configs}
+\begin{tabular}{@{}llp{5.5cm}c@{}}
+\toprule
+\textbf{Repository} & \textbf{Algorithm} & \textbf{Optimal Configuration} & \textbf{Improvement} \\
+\midrule
+\multirow{2}{*}{CsvHelper} 
+  & Genetic & CodeLocation, EmptyAssessingTests, MaxSizeLimit, SyntaxNodeConflict & 7.68× \\
+  & Local   & EmptyAssessingTests, SyntaxNodeConflict & 1.33× \\
+\midrule
+\multirow{2}{*}{GuardClauses} 
+  & Genetic & CodeLocation, EmptyAssessingTests, MaxSizeLimit, MutatorType, OverlappingTests & 8.86e+16\textsuperscript{*} \\
+  & Local   & CodeLocation, EmptyAssessingTests, MaxSizeLimit, MutatorType & 1.92× \\
+\midrule
+\multirow{2}{*}{\makecell[l]{Marsen.NetCore.\\Dojo.Int.Test}} 
+  & Genetic & CodeLocation, MaxSizeLimit, MutatorType, OverlappingTests & 3403.26× \\
+  & Local   & EmptyAssessingTests, MaxSizeLimit, OverlappingTests, SyntaxNodeConflict & 32.32× \\
+\midrule
+\multirow{2}{*}{MoreLinq} 
+  & Genetic & CodeLocation, EmptyAssessingTests, MutatorType, OverlappingTests & 43.44× \\
+  & Local   & CodeLocation, EmptyAssessingTests, MaxSizeLimit & 30.65× \\
+\midrule
+\multirow{2}{*}{\makecell[l]{TimeProvider\\Extensions}} 
+  & Genetic & CodeLocation, EmptyAssessingTests, MaxSizeLimit, MutatorType, OverlappingTests & 331.09× \\
+  & Local   & MaxSizeLimit & 1.16× \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textit{Note:} Improvement factor represents multiplicative gain in SSHOM success rate compared to using no heuristics with the same algorithm. \textsuperscript{*}GuardClauses-Genetic shows quasi-complete separation (extremely large improvement factor with infinite confidence intervals), suggesting perfect or near-perfect prediction.
+
+% ============================================================================
+% TABLE 2: Binary Matrix of Optimal Configurations
+% ============================================================================
+
+\subsection*{Table 2: Heuristic ON/OFF Matrix}
+
+\begin{table}[h]
+\centering
+\caption{Binary representation of optimal configurations. 1 = heuristic enabled, 0 = disabled.}
+\label{tab:config_matrix}
+\begin{tabular}{@{}llcccccc@{}}
+\toprule
+\textbf{Repository} & \textbf{Alg.} & \textbf{CL} & \textbf{EAT} & \textbf{MSL} & \textbf{MT} & \textbf{OT} & \textbf{SNC} \\
+\midrule
+CsvHelper    & G & 1 & 1 & 1 & 0 & 0 & 1 \\
+CsvHelper    & L & 0 & 1 & 0 & 0 & 0 & 1 \\
+\midrule
+GuardClauses & G\textsuperscript{*} & 1 & 1 & 1 & 1 & 1 & 0 \\
+GuardClauses & L & 1 & 1 & 1 & 1 & 0 & 0 \\
+\midrule
+Marsen.Dojo  & G & 1 & 0 & 1 & 1 & 1 & 0 \\
+Marsen.Dojo  & L & 0 & 1 & 1 & 0 & 1 & 1 \\
+\midrule
+MoreLinq     & G & 1 & 1 & 0 & 1 & 1 & 0 \\
+MoreLinq     & L & 1 & 1 & 1 & 0 & 0 & 0 \\
+\midrule
+TimeProvider & G & 1 & 1 & 1 & 1 & 1 & 0 \\
+TimeProvider & L & 0 & 0 & 1 & 0 & 0 & 0 \\
+\midrule
+\textbf{Sum (G)} &   & \textbf{5} & \textbf{4} & \textbf{4} & \textbf{4} & \textbf{4} & \textbf{1} \\
+\textbf{Sum (L)} &   & \textbf{2} & \textbf{4} & \textbf{4} & \textbf{1} & \textbf{1} & \textbf{2} \\
+\textbf{Total}   &   & \textbf{7} & \textbf{8} & \textbf{8} & \textbf{5} & \textbf{5} & \textbf{3} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textit{Legend:} CL=CodeLocation, EAT=EmptyAssessingTests, MSL=MaxSizeLimit, MT=MutatorType, OT=OverlappingTests, SNC=SyntaxNodeConflict. G=Genetic, L=Local. \textsuperscript{*}Separation issue in GuardClauses-Genetic.
+
+% ============================================================================
+% TABLE 3: Heuristic Frequency Analysis
+% ============================================================================
+
+\subsection*{Table 3: Heuristic Frequency in Optimal Configurations}
+
+\begin{table}[h]
+\centering
+\caption{Frequency of each heuristic appearing in optimal configurations across all algorithm×repository combinations (n=10).}
+\label{tab:frequency}
+\begin{tabular}{@{}lccp{5.5cm}@{}}
+\toprule
+\textbf{Heuristic} & \textbf{Count} & \textbf{Frequency} & \textbf{Optimal Contexts} \\
+\midrule
+EmptyAssessingTests  & 8/10 & 80.0\% & All except Marsen-G, TimeProvider-L \\
+MaxSizeLimit         & 8/10 & 80.0\% & All except MoreLinq-G, CsvHelper-L \\
+CodeLocation         & 7/10 & 70.0\% & All Genetic; GuardClauses-L, MoreLinq-L \\
+OverlappingTests     & 5/10 & 50.0\% & 4 Genetic; Marsen-L \\
+MutatorType          & 5/10 & 50.0\% & 4 Genetic; GuardClauses-L \\
+SyntaxNodeConflict   & 3/10 & 30.0\% & CsvHelper (both), Marsen-L \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ============================================================================
+% TABLE 4: Algorithm-Specific Patterns
+% ============================================================================
+
+\subsection*{Table 4: Algorithm-Specific Heuristic Patterns}
+
+\begin{table}[h]
+\centering
+\caption{Heuristic usage patterns by algorithm across repositories.}
+\label{tab:patterns}
+\begin{tabular}{@{}lcccl@{}}
+\toprule
+\textbf{Heuristic} & \textbf{Genetic} & \textbf{Local} & \textbf{Difference} & \textbf{Interpretation} \\
+\midrule
+EmptyAssessingTests  & 4/5 (80\%) & 4/5 (80\%)  & 0\%   & Universal benefit \\
+CodeLocation         & 5/5 (100\%) & 2/5 (40\%)  & +60\% & Genetic-favoring \\
+MaxSizeLimit         & 4/5 (80\%)  & 4/5 (80\%)  & 0\%   & Universal benefit \\
+OverlappingTests     & 4/5 (80\%)  & 1/5 (20\%)  & +60\% & \textbf{Genetic-favoring} \\
+MutatorType          & 4/5 (80\%)  & 1/5 (20\%)  & +60\% & \textbf{Genetic-favoring} \\
+SyntaxNodeConflict   & 1/5 (20\%)  & 2/5 (40\%)  & -20\% & Repository-specific \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textit{Key finding:} OverlappingTests and MutatorType show strong Genetic preference (80\% vs 20\%), while EmptyAssessingTests and MaxSizeLimit benefit both algorithms equally.
+
+% ============================================================================
+% TABLE 5: Universal Configuration Recommendation
+% ============================================================================
+
+\subsection*{Table 5: Universal Configuration Recommendation}
+
+\begin{table}[h]
+\centering
+\caption{Recommended universal configuration based on frequency threshold (≥50\% of optimal configurations).}
+\label{tab:universal}
+\begin{tabular}{@{}lccl@{}}
+\toprule
+\textbf{Heuristic} & \textbf{Frequency} & \textbf{Threshold} & \textbf{Recommendation} \\
+\midrule
+EmptyAssessingTests  & 80.0\% & ≥50\% & \textcolor{green}{\textbf{ON}} \\
+MaxSizeLimit         & 80.0\% & ≥50\% & \textcolor{green}{\textbf{ON}} \\
+CodeLocation         & 70.0\% & ≥50\% & \textcolor{green}{\textbf{ON}} \\
+OverlappingTests     & 50.0\% & ≥50\% & \textcolor{green}{\textbf{ON (borderline)}} \\
+MutatorType          & 50.0\% & ≥50\% & \textcolor{green}{\textbf{ON (borderline)}} \\
+\midrule
+SyntaxNodeConflict   & 30.0\% & <50\% & \textcolor{red}{\textbf{OFF}} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textit{Universal configuration:} EmptyAssessingTests + MaxSizeLimit + CodeLocation (core 3). OverlappingTests and MutatorType are borderline at exactly 50\% - include if Genetic-focused, exclude if Local-focused.
+
+% ============================================================================
+% TABLE 6: Performance Comparison
+% ============================================================================
+
+\subsection*{Table 6: Predicted Performance with Different Configurations}
+
+\begin{table}[h]
+\centering
+\small
+\caption{Comparison of predicted SSHOM success rate improvements for different configuration strategies.}
+\label{tab:performance}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Repository} & \textbf{Algorithm} & \textbf{Optimal} & \textbf{Universal (3-5 H)} & \textbf{Est. Loss} \\
+\midrule
+\multirow{2}{*}{CsvHelper} 
+  & Genetic & 7.68×    & ~5-6×   & 20-35\% \\
+  & Local   & 1.33×    & ~1.2×   & ~10\% \\
+\midrule
+\multirow{2}{*}{GuardClauses} 
+  & Genetic & [sep]\textsuperscript{*} & ---     & --- \\
+  & Local   & 1.92×    & ~1.8×   & ~6\% \\
+\midrule
+\multirow{2}{*}{Marsen.Dojo} 
+  & Genetic & 3403.26× & ~2000-3000× & 12-40\% \\
+  & Local   & 32.32×   & ~25-30× & 7-22\% \\
+\midrule
+\multirow{2}{*}{MoreLinq} 
+  & Genetic & 43.44×   & ~30-35× & 19-31\% \\
+  & Local   & 30.65×   & 30.65×  & 0\% \\
+\midrule
+\multirow{2}{*}{TimeProvider} 
+  & Genetic & 331.09×  & ~200-250× & 24-40\% \\
+  & Local   & 1.16×    & 1.16×   & 0\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textit{Note:} Universal configuration = EmptyAssessingTests + MaxSizeLimit + CodeLocation (core 3), optionally + OverlappingTests + MutatorType (if Genetic-focused). \textsuperscript{*}[sep] = separation, unreliable estimate. Loss estimates based on predicted OR calculations.
+
+% ============================================================================
+% TABLE 7: Statistical Summary
+% ============================================================================
+
+\subsection*{Table 7: Statistical Summary of Optimal Configurations}
+
+\begin{table}[h]
+\centering
+\caption{Statistical characteristics of optimal configurations (excluding GuardClauses-Genetic separation).}
+\label{tab:stats}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Metric} & \textbf{Genetic} & \textbf{Local} \\
+\midrule
+Mean heuristics enabled           & 4.25 & 2.80 \\
+Std. dev. heuristics enabled      & 0.50 & 1.30 \\
+Min improvement factor            & 7.68× & 1.16× \\
+Max improvement factor            & 3403.26× & 32.32× \\
+Median improvement factor         & 187.26× & 1.92× \\
+Always included (100\%)           & CodeLocation & --- \\
+Usually included (≥80\%)          & EmptyAssessingTests\textsuperscript{†}, MaxSizeLimit, MutatorType, OverlappingTests & EmptyAssessingTests, MaxSizeLimit \\
+Never included (0\%)              & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textit{Note:} \textsuperscript{†}EmptyAssessingTests appears in 80\% of Genetic configs (4/5). Genetic uses mean 4.25 heuristics vs Local's 2.80, showing Genetic's higher complexity needs.
+
+% ============================================================================
+% TABLE 8: Cross-Repository Consistency
+% ============================================================================
+
+\subsection*{Table 8: Cross-Repository Consistency Analysis}
+
+\begin{table}[h]
+\centering
+\caption{Consistency of heuristic effects across repositories (5 repositories analyzed).}
+\label{tab:consistency}
+\begin{tabular}{@{}lccl@{}}
+\toprule
+\textbf{Heuristic} & \textbf{Consistent} & \textbf{Variable} & \textbf{Pattern} \\
+\midrule
+CodeLocation         & 5/5 & 0/5 & Always included in Genetic optimal \\
+EmptyAssessingTests  & 4/5 & 1/5 & Highly consistent benefit \\
+MaxSizeLimit         & 4/5 & 1/5 & Highly consistent benefit \\
+OverlappingTests     & 4/5 & 1/5 & Strongly favors Genetic (80\% vs 20\%) \\
+MutatorType          & 4/5 & 1/5 & Strongly favors Genetic (80\% vs 20\%) \\
+SyntaxNodeConflict   & 1/5 & 4/5 & Highly repository-specific \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textit{Interpretation:} "Consistent" = appears in ≥4/5 optimal configs for at least one algorithm. CodeLocation shows perfect consistency (100\%) for Genetic. OverlappingTests and MutatorType show strong algorithm-specific patterns.
+
+% ============================================================================
+% TABLE 9: Configuration Complexity
+% ============================================================================
+
+\subsection*{Table 9: Configuration Complexity Comparison}
+
+\begin{table}[h]
+\centering
+\caption{Complexity metrics for different configuration strategies.}
+\label{tab:complexity}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Strategy} & \textbf{Configs Needed} & \textbf{Avg. Heuristics} & \textbf{Maintenance} \\
+\midrule
+Algorithm-specific (optimal) & 10 & 3.42 & High \\
+Universal Core (≥70\%)       & 1  & 3.00 & Low \\
+Universal Extended (≥50\%)   & 1  & 5.00 & Low \\
+Algorithm-agnostic (all)     & 2  & 4.25 / 2.80 & Medium \\
+All ON (baseline)            & 1  & 6.00 & Low \\
+All OFF (baseline)           & 1  & 0.00 & Low \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ============================================================================
+% TABLE 10: Key Findings Summary
+% ============================================================================
+
+\subsection*{Table 10: Key Findings and Conclusions}
+
+\begin{longtable}{@{}p{0.3\textwidth}p{0.65\textwidth}@{}}
+\toprule
+\textbf{Finding} & \textbf{Evidence / Interpretation} \\
+\midrule
+\endfirsthead
+
+\multicolumn{2}{c}%
+{{\tablename\ \thetable{} -- continued from previous page}} \\
+\toprule
+\textbf{Finding} & \textbf{Evidence / Interpretation} \\
+\midrule
+\endhead
+
+\midrule
+\multicolumn{2}{r}{{Continued on next page}} \\
+\endfoot
+
+\bottomrule
+\endlastfoot
+
+No universal optimum & 
+Optimal configurations differ across 10/10 algorithm×repository combinations (Table 2). Zero configurations appear in all contexts. \\
+\midrule
+
+Three heuristics dominate & 
+EmptyAssessingTests and MaxSizeLimit appear in 80\% (8/10) of optimal configs, CodeLocation in 70\% (7/10) (Table 3). These form the core universal configuration. \\
+\midrule
+
+CodeLocation is essential for Genetic & 
+Present in 100\% (5/5) Genetic configs, only 40\% (2/5) Local configs (Table 4). Shows perfect consistency for Genetic algorithm (Table 8). \\
+\midrule
+
+OverlappingTests and MutatorType favor Genetic & 
+Present in 80\% Genetic configs vs 20\% Local configs (Table 4). Strong algorithm-specific interaction effects at 50\% overall frequency (Table 5). \\
+\midrule
+
+Local prefers fewer heuristics & 
+Mean 2.80 heuristics for Local vs 4.25 for Genetic (Table 7). Local achieves good performance with minimal configuration. \\
+\midrule
+
+Universal config feasible at two levels & 
+Core 3 heuristics (70-80\% frequency) for simplicity. Extended 5 heuristics (≥50\% frequency) for Genetic-focused use. Estimated 0-40\% performance loss vs optimal (Table 6). \\
+\midrule
+
+Genetic benefits more from heuristics & 
+Median improvement 187.26× for Genetic vs 1.92× for Local (Table 7). Genetic has worse baseline without heuristics, gains dramatically more from optimization. \\
+\midrule
+
+Repository context matters significantly & 
+Improvement factors vary 7.68×--3403.26× for Genetic, 1.16×--32.32× for Local (Table 1). Code characteristics and test suite structure significantly impact heuristic effectiveness. \\
+\midrule
+
+Configuration complexity manageable & 
+Universal core strategy requires 1 config managing 3 heuristics vs 10 configs for optimal (Table 9). Trade-off: simplicity vs 7-40\% performance loss. \\
+\midrule
+
+Separation issues affect GuardClauses & 
+GuardClauses-Genetic shows quasi-complete separation (8.86e+16 improvement factor), indicating perfect or near-perfect prediction by the model. Results for this combination should be interpreted cautiously. \\
+
+\end{longtable}
+
+% ============================================================================
+% Additional Context
+% ============================================================================
+
+\section*{Methodology Notes}
+
+\paragraph{Data Source:} Analysis based on GLM binomial ANOVA with logit link applied to SSHOM success rates from 5 repositories: CsvHelper, GuardClauses, Marsen.NetCore.Dojo.Integration.Test, MoreLinq, and TimeProviderExtensions. Total of 10 algorithm×repository combinations (2 algorithms × 5 repositories).
+
+\paragraph{Separation Issue:} GuardClauses-Genetic exhibits quasi-complete separation with extremely large improvement factor (8.86e+16) and infinite confidence intervals. This indicates the model achieves near-perfect prediction for this combination. While the predicted optimal configuration is reported, statistical estimates should be interpreted cautiously.
+
+\paragraph{Improvement Factor:} Calculated as multiplicative gain in predicted odds of SSHOM success with optimal heuristics vs no heuristics: $\text{Improvement} = \frac{\text{OR}_{\text{optimal config}}}{\text{OR}_{\text{all OFF}}}$ where OR is the odds ratio from the GLM model.
+
+\paragraph{Statistical Significance:} All configurations selected based on exhaustive search of $2^6=64$ possible combinations per algorithm×repository. Predictions derived from GLM coefficients with FDR-corrected $q$-values for significance testing. Only statistically significant effects included in optimal configurations.
+
+\paragraph{Universal Configuration:} Two thresholds applied: (1) Core universal config includes heuristics appearing in ≥70\% of optimal configs (CodeLocation, EmptyAssessingTests, MaxSizeLimit); (2) Extended universal config includes heuristics at ≥50\% threshold (adds OverlappingTests and MutatorType).
+
+\paragraph{Reproducibility:} All results generated via \texttt{analyze\_heuristic\_performance.py} and \texttt{analyze\_universal\_config.py} scripts. CSV exports available in \texttt{part4\_best\_configs\_*.csv} files (5 files, one per repository, each containing rankings for both algorithms).
+
+\end{document}
