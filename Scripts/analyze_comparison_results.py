@@ -834,6 +834,143 @@ def create_baseline_visualizations(baseline_comparison: pd.DataFrame, out_dir: P
     plt.close()
 
 
+def create_additional_visualizations(df: pd.DataFrame, out_dir: Path):
+    """Create additional requested visualizations for thesis."""
+    print("\n=== CREATING ADDITIONAL VISUALIZATIONS ===")
+    
+    sns.set_style("whitegrid")
+    
+    # 1. SSHOM Rate by Repository (validate-with-heuristics only)
+    print("Creating SSHOM rate by repository graph...")
+    validate_df = df[df['config'] == 'validate-with-heuristics'].copy()
+    
+    if len(validate_df) > 0:
+        fig, ax = plt.subplots(figsize=(12, 7))
+        
+        repos = sorted(validate_df['repo_name'].unique())
+        x = np.arange(len(repos))
+        
+        sshom_rates = []
+        sshom_errors = []
+        
+        for repo in repos:
+            repo_data = validate_df[validate_df['repo_name'] == repo]
+            rates = repo_data['sshom_rate_corrected'].values
+            
+            if len(rates) > 0:
+                mean, ci_lo, ci_hi = bootstrap_ci(rates)
+                sshom_rates.append(mean)
+                sshom_errors.append([mean - ci_lo, ci_hi - mean])
+            else:
+                sshom_rates.append(0)
+                sshom_errors.append([0, 0])
+        
+        sshom_errors = np.array(sshom_errors).T
+        
+        bars = ax.bar(x, sshom_rates, yerr=sshom_errors, capsize=5, alpha=0.8, 
+                     color='#9b59b6', edgecolor='black', linewidth=1.5)
+        
+        # Add value labels on top of bars
+        for i, (bar, rate) in enumerate(zip(bars, sshom_rates)):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                   f'{rate:.1f}%',
+                   ha='center', va='bottom', fontweight='bold', fontsize=10)
+        
+        ax.set_xlabel('Repository', fontsize=13, fontweight='bold')
+        ax.set_ylabel('Average SSHOM Rate (%)', fontsize=13, fontweight='bold')
+        ax.set_title('SSHOM Success Rate by Repository (Validate Mode)', 
+                    fontsize=15, fontweight='bold')
+        ax.set_xticks(x)
+        ax.set_xticklabels(repos, rotation=45, ha='right', fontsize=11)
+        ax.set_ylim(0, max(sshom_rates) * 1.15)  # Add 15% headroom for labels
+        ax.grid(axis='y', alpha=0.3, linestyle='--')
+        
+        plt.tight_layout()
+        plot_path = out_dir / "sshom_rate_by_repository.png"
+        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        print(f"Saved: {plot_path}")
+        plt.close()
+    else:
+        print("WARNING: No validate-with-heuristics data found, skipping SSHOM rate graph")
+    
+    # 2. Runtime Comparison: Baseline vs Accelerate-Reduced (focused view)
+    print("Creating baseline vs accelerate runtime comparison graph...")
+    baseline_df = df[df['config'] == 'baseline-fom-only'].copy()
+    accel_df = df[df['config'] == 'accelerate-with-heuristics-reduced'].copy()
+    
+    if len(baseline_df) > 0 and len(accel_df) > 0:
+        fig, ax = plt.subplots(figsize=(12, 7))
+        
+        repos = sorted(df['repo_name'].unique())
+        x = np.arange(len(repos))
+        width = 0.35
+        
+        baseline_times = []
+        baseline_errors = []
+        accel_times = []
+        accel_errors = []
+        
+        for repo in repos:
+            # Baseline data
+            baseline_repo = baseline_df[baseline_df['repo_name'] == repo]
+            if len(baseline_repo) > 0:
+                times = baseline_repo['total_test_duration_ms'].values / 1000.0
+                mean, ci_lo, ci_hi = bootstrap_ci(times)
+                baseline_times.append(mean)
+                baseline_errors.append([mean - ci_lo, ci_hi - mean])
+            else:
+                baseline_times.append(0)
+                baseline_errors.append([0, 0])
+            
+            # Accelerate data
+            accel_repo = accel_df[accel_df['repo_name'] == repo]
+            if len(accel_repo) > 0:
+                times = accel_repo['total_test_duration_ms'].values / 1000.0
+                mean, ci_lo, ci_hi = bootstrap_ci(times)
+                accel_times.append(mean)
+                accel_errors.append([mean - ci_lo, ci_hi - mean])
+            else:
+                accel_times.append(0)
+                accel_errors.append([0, 0])
+        
+        baseline_errors = np.array(baseline_errors).T
+        accel_errors = np.array(accel_errors).T
+        
+        bars1 = ax.bar(x - width/2, baseline_times, width, label='Baseline (FOM only)', 
+                      yerr=baseline_errors, capsize=5, alpha=0.85, 
+                      color='#e74c3c', edgecolor='black', linewidth=1.2)
+        bars2 = ax.bar(x + width/2, accel_times, width, label='HOMT (Accelerate-Reduced)', 
+                      yerr=accel_errors, capsize=5, alpha=0.85, 
+                      color='#2ecc71', edgecolor='black', linewidth=1.2)
+        
+        # Add value labels on top of bars
+        for bars in [bars1, bars2]:
+            for bar in bars:
+                height = bar.get_height()
+                if height > 0:
+                    ax.text(bar.get_x() + bar.get_width()/2., height,
+                           f'{height:.1f}s',
+                           ha='center', va='bottom', fontsize=9, fontweight='bold')
+        
+        ax.set_xlabel('Repository', fontsize=13, fontweight='bold')
+        ax.set_ylabel('Average Runtime (seconds)', fontsize=13, fontweight='bold')
+        ax.set_title('Runtime Comparison: Baseline FOM vs HOMT Acceleration', 
+                    fontsize=15, fontweight='bold')
+        ax.set_xticks(x)
+        ax.set_xticklabels(repos, rotation=45, ha='right', fontsize=11)
+        ax.legend(fontsize=11, loc='upper left')
+        ax.grid(axis='y', alpha=0.3, linestyle='--')
+        
+        plt.tight_layout()
+        plot_path = out_dir / "runtime_baseline_vs_accelerate.png"
+        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        print(f"Saved: {plot_path}")
+        plt.close()
+    else:
+        print("WARNING: Missing baseline or accelerate data, skipping runtime comparison graph")
+
+
 def generate_executive_summary(df: pd.DataFrame, accel_summary: pd.DataFrame,
                                validate_summary: pd.DataFrame, alg_summary: pd.DataFrame,
                                out_dir: Path):
@@ -1021,6 +1158,9 @@ def main():
         create_comparison_visualizations(df, accel_summary, validate_summary, out_dir)
         create_baseline_visualizations(baseline_comparison, out_dir)
     
+    # Create additional requested visualizations
+    create_additional_visualizations(df, out_dir)
+    
     # Generate executive summary
     if accel_summary is not None and validate_summary is not None and alg_summary is not None:
         generate_executive_summary(df, accel_summary, validate_summary, alg_summary, out_dir)
@@ -1042,6 +1182,8 @@ def main():
     print("  - runtime_comparison.png (accelerate vs validate)")
     print("  - sshom_rate_comparison.png (SSHOM rates)")
     print("  - test_runs_efficiency.png (test group efficiency)")
+    print("  - sshom_rate_by_repository.png (SSHOM rates per repo in validate mode)")
+    print("  - runtime_baseline_vs_accelerate.png (focused baseline vs accelerate comparison)")
     print("  - EXECUTIVE_SUMMARY.txt (comprehensive research findings)")
 
 
